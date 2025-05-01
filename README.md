@@ -8,9 +8,9 @@ CAPTAIN v.2 implements multi-objective reinforcement learning to optimize conser
 
 Create a Virtual Environment: open terminal or command prompt and navigate to the directory where the CAPTAIN library and scripts are:
 
-`cd captain_codes_data`
+`cd your_path/captain2-main`
 
-Create a Python virtual environment (you'll need to have Python 3.11 or higher already installed; you might have to type `python3.11` if you have multiple versions of python installed):
+Create a Python virtual environment (you'll need to have Python 3.11 or 3.12 already installed; you might have to type `python3.11` if you have multiple versions of python installed):
 
 `python -m venv venv`
 

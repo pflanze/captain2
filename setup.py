@@ -4,7 +4,7 @@ import setuptools
 
 CURRENT_PYTHON = sys.version_info[:2]
 REQUIRED_PYTHON = (3, 10)
-MAX_PYTHON = (3, 13)
+MAX_PYTHON = (3, 12)
 
 if CURRENT_PYTHON < REQUIRED_PYTHON or CURRENT_PYTHON > MAX_PYTHON:
     sys.stderr.write("""
