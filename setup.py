@@ -4,14 +4,14 @@ import setuptools
 
 CURRENT_PYTHON = sys.version_info[:2]
 REQUIRED_PYTHON = (3, 10)
-MAX_PYTHON = (3, 12)
+MAX_PYTHON = (3, 13)
 
 if CURRENT_PYTHON < REQUIRED_PYTHON or CURRENT_PYTHON > MAX_PYTHON:
     sys.stderr.write("""
 ==========================
 Unsupported Python version
 ==========================
-DeepDive requires Python versions between 3.%s and 3.%s, but you're trying to
+CAPTAIN requires Python versions between 3.%s and 3.%s, but you're trying to
 install it on Python %s.%s.
 """ % ( REQUIRED_PYTHON[1], MAX_PYTHON[1], CURRENT_PYTHON[0], CURRENT_PYTHON[1]))
     sys.exit(1)
