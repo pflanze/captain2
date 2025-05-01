@@ -1,4 +1,4 @@
-# CAPTAIN library
+# CAPTAIN v.2
 
 CAPTAIN v.2 implements multi-objective reinforcement learning to optimize conservation or restoration planning with biodiversity and carbon targets while incorporating costs, and budget constraints. The method is described in our pre-print [Silvestro et al. 2025 bioRxiv](https://www.biorxiv.org/content/10.1101/2025.01.31.635975v2.abstract).  The program is released under [this license](https://github.com/captain-project/captain2/blob/main/CAPTAIN-License.pdf).
 
