@@ -712,7 +712,7 @@ def get_rl_features_cell(h, pm, rl, sp_threshold, dm, min_protected_cells=10,
         if geo_range:
             h_non_protected = (h > sp_threshold) * (1 - pm)
             h_protected = (h > sp_threshold) * pm
-            print("geo_range", pm)
+            # print("geo_range", pm)
             protected_species_id = np.einsum('sxy -> s', h_protected)  # shape: species
 
             min_number_protected_cells_sp = min_protected_cells
