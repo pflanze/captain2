@@ -100,7 +100,7 @@ def crop_data(layer, cropped):
     return layer_np
 
 
-def get_data_from_list(sdm_dir, tag="/*.tif", max_species_cuptoff=None, rescale=False):
+def get_data_from_list(sdm_dir, tag="/*.tif", max_species_cuptoff=None, rescale=False, zero_to_nan=False):
     sdm_files = np.sort(glob.glob(sdm_dir + tag))
     sdms = []
     sp_names = []
@@ -114,7 +114,22 @@ def get_data_from_list(sdm_dir, tag="/*.tif", max_species_cuptoff=None, rescale=
             break
 
     sdms = np.squeeze(np.array(sdms))  # shape = (species, lon, lat)
+    if zero_to_nan:
+        sdms[sdms == 0] = np.nan
     return sdms, sp_names
+
+
+def get_graph(sdms):
+    species_richness = np.nansum(sdms, axis=0)
+    original_grid_shape = species_richness.shape
+    # MAKE IT A GRAPH without gaps
+    reference_grid_pu = species_richness > 0
+    reference_grid_pu_nan = reference_grid_pu.astype(float)
+    reference_grid_pu_nan[reference_grid_pu_nan == 0] = np.nan
+    # reduce coordinates
+    xy_coords = np.meshgrid(np.arange(original_grid_shape[1]), np.arange(original_grid_shape[0]))
+    graph_coords, _, __ = grid_to_graph(np.array(xy_coords), reference_grid_pu)
+    return original_grid_shape, reference_grid_pu, reference_grid_pu_nan, graph_coords
 
 
 
