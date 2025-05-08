@@ -37,6 +37,7 @@ class ConfigOptimPolicy():
                  disturbance=4,
                  degrade_steps=3,
                  initial_disturbance=0.75,
+                 initial_selective_disturbance=None,
                  initial_protection_matrix=None,
                  edge_effect=1,
                  protection_cost=1,
@@ -110,6 +111,7 @@ class ConfigOptimPolicy():
         self.disturbance_mode = disturbance
         self.degrade_steps = degrade_steps
         self.initial_disturbance = initial_disturbance
+        self.initial_selective_disturbance = initial_selective_disturbance
         self.initial_protection_matrix = initial_protection_matrix
         self.edge_effect = edge_effect
         self.use_protection_cost = protection_cost
@@ -237,6 +239,9 @@ class EvolveEnv():
     def set_init_disturbance(self, d):
         self._init_disturbance = d
 
+    def set_init_selective_disturbance(self, d):
+        self._init_selective_disturbance = d
+
     def set_init_rl_status(self, r):
         self._init_rl_status = r
 
@@ -340,6 +345,7 @@ class EVOLUTIONBoltzmannPredict(EvolveEnv):
 
         if config.use_empirical_setup:
             self._init_disturbance = None
+            self._init_selective_disturbance = None
             self._init_rl_status = None
             self._evolve_rl_status = config.evolve_rl_status
             self._ext_risk_class = config.ext_risk_class
@@ -477,9 +483,9 @@ class EVOLUTIONBoltzmannPredict(EvolveEnv):
 
         # --- 2. fast-forward disturbance and environment degradation ---#
         if self.use_empirical_setup:
-            dm_tmp = self._init_disturbance + 0
-            env.bioDivGrid.setDisturbanceMatrix(dm_tmp)
-            env.bioDivGrid.setSelectiveDisturbanceMatrix(dm_tmp)
+            env.bioDivGrid.setDisturbanceMatrix(self._init_disturbance + 0)
+            if self._init_selective_disturbance is not None:
+                env.bioDivGrid.setSelectiveDisturbanceMatrix(self._init_selective_disturbance + 0)
             # degrade environment
             # print("K DEBUG - ini pop 2 ", env.grid_obj_previous.individualsPerSpecies())
             # print("K DEBUG - ini pop 3", env.bioDivGrid.individualsPerSpecies())
@@ -887,6 +893,7 @@ def _runOptimPolicySetup(config: ConfigOptimPolicy):
                                                 action_adaptor,
                                                 config)
     evolutionRunner.set_init_disturbance(config.initial_disturbance)
+    evolutionRunner.set_init_selective_disturbance(config.initial_selective_disturbance)
     if config.use_empirical_setup:
         evolutionRunner.set_init_rl_status(
             config.initial_rl_status)  # if config.initial_rl_status -> RL init based on pop sizes
