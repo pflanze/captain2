@@ -1098,15 +1098,15 @@ class BioDivEnv(gym.Env):
             tot_reward = reward_species + reward_disturbance
             # tot_reward = -np.sum(non_protected_species_id)
             reward = tot_reward - self._cumrewards[0]
-            if self._verbose:
-                print("\nReward internal:", reward, reward_species,
-                      tot_reward, reward_disturbance,
-                      "n_non_protected_species", n_non_protected_species,
-                      np.sum(self.bioDivGrid._protection_matrix),
-
-                      )
-                print(protected_pop_per_species[:10])
-                print(pr_fr[:10])
+            # if self._verbose:
+            #     print("\nReward internal:", reward, reward_species,
+            #           tot_reward, reward_disturbance,
+            #           "n_non_protected_species", n_non_protected_species,
+            #           np.sum(self.bioDivGrid._protection_matrix),
+            #
+            #           )
+            #     print(protected_pop_per_species[:10])
+            #     print(pr_fr[:10])
 
         elif self.rewardMode == "pareto_mlt":
             # carbon reward
@@ -1144,7 +1144,6 @@ class BioDivEnv(gym.Env):
             # reward cost
             tot_reward_cost = self.budget / self._initialBudget * 100
             reward_cost = (tot_reward_cost * self._reward_weights['cost'] - self._cumrewards[2])
-
             # print("\n reward_c: %s  reward_sp: %s  reward_cost: %s %s" % (reward_c, reward_sp, reward_cost, tot_reward_cost))
             # print(self.budget , self._initialBudget)
             # print("\nC:", self._init_total_carbon, self._total_natural_carbon, np.sum(self.bioDivGrid.getCarbonValue_cell()) )

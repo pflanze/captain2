@@ -53,8 +53,8 @@ def dispersalDistancesThresholdCoord(length: int,
                                      lambda_0: float,
                                      lat: np.ndarray,
                                      lon: np.ndarray,
-                                     threshold=3,
-                                     return_sparse=False):
+                                     threshold=3
+                                     ):
     print("calculating distances with threshold...")
     dumping_dist = np.zeros((length, length, length, length))
     for i in range(0, length):
@@ -70,10 +70,7 @@ def dispersalDistancesThresholdCoord(length: int,
                         dumping_dist[i, j, n, m] = np.exp(
                             -exp_rate * np.sqrt((lat[i,j] - lat[n,m]) ** 2 + (lon[i,j] - lon[n,m]) ** 2)
                         )
-    if return_sparse:
-        return sparse.COO(dumping_dist)
-    else:
-        return dumping_dist
+    return dumping_dist
 
 
 def add_random_diffusion_mortality(
