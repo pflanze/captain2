@@ -32,3 +32,26 @@ def get_nn_params_from_file(logfile, load_best_epoch=False, sample_from_iteratio
     wNN = loadedW[np.min(ind):]
     return wNN
 
+
+def parse_str(config_entry):
+    config_entry = config_entry.split()
+    var = []
+    for x in config_entry:
+        if x == "None":
+            var.append(None)
+        elif x == "True":
+            var.append(True)
+        elif x == "False":
+            var.append(False)
+        else:
+            try: var.append(int(x))
+            except:
+                try: var.append(float(x))
+                except:
+                    var.append(x)
+
+    if len(var) == 1:
+        return var[0]
+    else:
+        return np.array(var)
+

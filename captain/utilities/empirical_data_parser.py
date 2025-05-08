@@ -347,8 +347,6 @@ def calc_all_to_all_geo_distanc_grid(lat2d, lon2d):
 
 
 
-
-
 def get_dispersal_prob(distances, lambda0, max_dist=None):
     r = 1 / lambda0
     dispersal = np.exp(r * distances)

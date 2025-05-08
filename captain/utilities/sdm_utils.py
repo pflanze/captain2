@@ -1,4 +1,9 @@
 import os
+import sys
+import rioxarray as rxr
+import warnings
+import rasterio
+
 import numpy as np
 from scipy import ndimage
 import glob
@@ -80,9 +85,24 @@ def get_features_sdm(bathy, temp, oxygen,
     return features, features_future
 
 
+def load_map(filename):
+    if ".tif" in filename:
+        warnings.filterwarnings("ignore", category=rasterio.errors.NotGeoreferencedWarning)
+        sp_data = rxr.open_rasterio(filename, masked=True, parse_coordinates=False)
+        sp_data_cropped = sp_data.to_numpy()[0]
+        taxon_name = os.path.basename(filename).split(".tif")[0]
+    elif ".npz" in filename:
+        sp_data = np.load(filename, allow_pickle=True)
+        sp_data_cropped = sp_data['arr_0'].item()['x']
+        taxon_name = os.path.basename(filename).split(".npz")[0]
+    else:
+        print("File not found", filename)
+        sys.exit()
+    return sp_data_cropped, taxon_name
+
+
 def get_sdm_data(sdm_files, taxon_index, cropped=None):
     if ".tif" in sdm_files[taxon_index]:
-        import rioxarray as rxr
         sp_data = rxr.open_rasterio(sdm_files[taxon_index], masked=True)
         if cropped is not None:
             sp_data_cropped = crop_data(sp_data, cropped)
@@ -100,7 +120,7 @@ def crop_data(layer, cropped):
     return layer_np
 
 
-def get_data_from_list(sdm_dir, tag="/*.tif", max_species_cuptoff=None, rescale=False, zero_to_nan=False):
+def get_data_from_list(sdm_dir, tag="/*.tif", max_species_cutoff=None, rescale=False, zero_to_nan=False):
     sdm_files = np.sort(glob.glob(sdm_dir + tag))
     sdms = []
     sp_names = []
@@ -110,7 +130,7 @@ def get_data_from_list(sdm_dir, tag="/*.tif", max_species_cuptoff=None, rescale=
             sp_data /= np.nanmax(sp_data)
         sdms.append(sp_data)
         sp_names.append(taxon_name)
-        if i + 1 == max_species_cuptoff:
+        if i + 1 == max_species_cutoff:
             break
 
     sdms = np.squeeze(np.array(sdms))  # shape = (species, lon, lat)
@@ -129,8 +149,7 @@ def get_graph(sdms):
     # reduce coordinates
     xy_coords = np.meshgrid(np.arange(original_grid_shape[1]), np.arange(original_grid_shape[0]))
     graph_coords, _, __ = grid_to_graph(np.array(xy_coords), reference_grid_pu)
-    return original_grid_shape, reference_grid_pu, reference_grid_pu_nan, graph_coords
-
+    return original_grid_shape, reference_grid_pu, reference_grid_pu_nan, xy_coords, graph_coords
 
 
 def grid_to_graph(grid, reference_grid_pu, n_pus=None, nan_to_zero=False):
