@@ -3,7 +3,7 @@ import sys
 import rioxarray as rxr
 import warnings
 import rasterio
-
+import tifffile
 import numpy as np
 from scipy import ndimage
 import glob
@@ -212,6 +212,70 @@ def graph_to_grid(graph, reference_grid_pu, n_pus=None, zero_to_nan=False):
     return m_grid
 
 
+
+def npz_to_tiff(npz_file, tiff_file):
+    """
+    Reads data from an .npz file and saves it as a .tiff file.
+
+    Args:
+        npz_file (str): Path to the input .npz file.
+        tiff_file (str): Path to the output .tiff file.
+    """
+    try:
+        data = np.load(npz_file, allow_pickle=True)
+        # data = np.load(npz_file)
+        # Assuming the .npz file contains a single array.
+        # If it contains multiple arrays, you might need to specify which one to save.
+        if len(data.files) == 1:
+            array_name = data.files[0]
+            image_data = data['arr_0'].item()['x'].astype(np.float32)
+            print(image_data.shape, np.min(image_data), np.max(image_data), image_data.dtype)
+            tifffile.imwrite(tiff_file, image_data)
+            print(f"Converted '{npz_file}' to '{tiff_file}'")
+        elif len(data.files) > 1:
+            print(f"Warning: '{npz_file}' contains multiple arrays. Saving the first one found.")
+            array_name = data.files[0]
+            image_data = data['arr_0'].item()['x']
+            tifffile.imwrite(tiff_file, image_data)
+            print(f"Converted the first array from '{npz_file}' to '{tiff_file}'")
+        else:
+            print(f"Error: '{npz_file}' contains no arrays.")
+    except FileNotFoundError:
+        print(f"Error: NPZ file not found: '{npz_file}'")
+    except Exception as e:
+        print(f"An error occurred while processing '{npz_file}': {e}")
+
+def convert_npz_folder_to_tiff(npz_folder, tiff_folder=None):
+    """
+    Finds all .npz files in a folder and converts them to .tiff files.
+
+    Args:
+        npz_folder (str): Path to the folder containing the .npz files.
+        tiff_folder (str, optional): Path to the folder where the .tiff files
+                                     will be saved. If None, they are saved
+                                     in the same directory as the .npz files.
+                                     Defaults to None.
+    """
+    if not os.path.isdir(npz_folder):
+        print(f"Error: NPZ folder not found: '{npz_folder}'")
+        return
+
+    if tiff_folder is not None and not os.path.exists(tiff_folder):
+        os.makedirs(tiff_folder)
+
+    npz_files = glob.glob(os.path.join(npz_folder, "*.npz"))
+
+    if not npz_files:
+        print(f"No .npz files found in '{npz_folder}'.")
+        return
+
+    for npz_file in npz_files:
+        base_name = os.path.splitext(os.path.basename(npz_file))[0]
+        if tiff_folder:
+            tiff_file = os.path.join(tiff_folder, f"{base_name}.tif")
+        else:
+            tiff_file = os.path.join(os.path.dirname(npz_file), f"{base_name}.tif")
+        npz_to_tiff(npz_file, tiff_file)
 
 
 
