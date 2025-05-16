@@ -161,7 +161,8 @@ class EVOLUTIONBoltzmannBatchEmpirical(EVOLUTIONBoltzmannBatchRunner):
                  actions_per_step=1,
                  deterministic=False,
                  protection_per_step=1,
-                 return_species_data=None
+                 return_species_data=None,
+                 skip_dispersal=False,
                  ):
         """
         state_adaptor = RichStateAdaptor()
@@ -174,6 +175,7 @@ class EVOLUTIONBoltzmannBatchEmpirical(EVOLUTIONBoltzmannBatchRunner):
 
         self.feature_update_per_step = feature_update_per_step
         self._actions_per_step = actions_per_step
+        self._skip_dispersal = skip_dispersal
 
 
     def run_episode(self, env, policy, noise):
@@ -202,19 +204,23 @@ class EVOLUTIONBoltzmannBatchEmpirical(EVOLUTIONBoltzmannBatchRunner):
         counter = 0
         while True:
             # print("policy.reset_lastObs(None)", env.currentIteration,
-            #       env.bioDivGrid._counter, self._actions_per_step, counter)
+            #        env.bioDivGrid._counter, self._actions_per_step, counter)
             skip_env_step = counter % self._actions_per_step != 0
             if skip_env_step:
                 env.set_calc_reward = False
             else:
                 env.set_calc_reward = True
             action = self.select_action(state, info, policy)
-            state, reward, done, info = env.step(action, skip_env_step=skip_env_step, update_suitability=True)
+            state, reward, done, info = env.step(action, skip_env_step=skip_env_step,
+                                                 update_suitability=True, skip_dispersal=self._skip_dispersal)
+
+            print("\nself.feature_update_per_step", self.feature_update_per_step)
             if skip_env_step is False:
                 env.species_risk_criteria.update_pop_sizes(env.bioDivGrid)
-                # decide if update features or not
-                if self.feature_update_per_step:
-                    policy.reset_lastObs(None)
+
+            # decide if update features or not
+            if self.feature_update_per_step:
+                policy.reset_lastObs(None)
 
             # state here is richObs in BioDivEnv which is lastObs.stats_quadrant + timeSince last observe
             self._rewards.append(reward)
@@ -800,7 +806,8 @@ def runBatchGeneticStrategyEmpirical(envList,
                                      simulation_number_i=None,
                                      protection_matrix_constraint=None,
                                      reward_weights=None,
-                                     return_species_data=None
+                                     return_species_data=None,
+                                     skip_dispersal=False,
                                      ):
     batch_size = len(envList)
     RESOLUTION = resolution
@@ -814,7 +821,10 @@ def runBatchGeneticStrategyEmpirical(envList,
 
     # TODO: expose this
     rewardMode = envList[0].rewardMode
-    feature_set = rewardMode  # "all" # rewardMode
+    if envList[0].feature_set is None:
+        feature_set = rewardMode  # "all" # rewardMode
+    else:
+        feature_set = envList[0].feature_set
     num_features = len(get_feature_restore_indx(mode=feature_set))
     print("num_features", num_features)
     print(get_feature_restore_indx(mode=feature_set))
@@ -868,7 +878,8 @@ def runBatchGeneticStrategyEmpirical(envList,
                                                        deterministic=deterministic,
                                                        protection_per_step=protection_per_step,
                                                        reward_weights=reward_weights,
-                                                       return_species_data=return_species_data)
+                                                       return_species_data=return_species_data,
+                                                       skip_dispersal=skip_dispersal)
 
     if protection_matrix_constraint is not None:
         protection_constraint = protection_matrix_constraint.flatten()

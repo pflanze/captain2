@@ -903,7 +903,7 @@ def get_feature_restore_indx(mode="carbon", print_obs_mode=False):
     elif mode == "sp_risk_conv":
         indx = np.arange(17)
     elif mode == "pareto_mlt_future":
-        indx = np.arange(20)
+        indx = np.arange(21)
     elif mode == "pareto_mlt":
         indx = np.arange(16)
     else:
@@ -1127,7 +1127,8 @@ def extract_features_restore(grid_obj,
                                "EN_conv",
                                "potential_carbon",
                                "future_carbon",
-                               "potential_carbon_conv"
+                               "potential_carbon_conv",
+                               "cost"
                                ])
 
         #
@@ -1155,7 +1156,10 @@ def extract_features_restore(grid_obj,
 
         protection_vec = current_protection_matrix.flatten()
 
-        feat_list = np.hstack((feat_list, feat_list_carb[:, np.array([1,2,4])]))
+        feat_list = np.hstack((feat_list,
+                               feat_list_carb[:, np.array([1,2,4])],
+                               cost_quadrant.reshape((feat_list.shape[0], 1))
+                               ))
 
 
     elif feature_set == "pareto_mlt":
@@ -1316,7 +1320,7 @@ def extract_features_restore(grid_obj,
 
     if feature_set not in  ["sp_risk_protect", "sp_risk_protect_pop",
                             "sp_risk_protect_future", "sp_risk_protect_pop_future",
-                            "future_carbon", "sp_risk_conv", "pareto_mlt"]:
+                            "future_carbon", "sp_risk_conv", "pareto_mlt", "pareto_mlt_future"]:
         all_features_by_quadrant = feat_list[:, get_feature_restore_indx(feature_set)]
         all_feat_names = feat_names[get_feature_restore_indx(feature_set)]
 

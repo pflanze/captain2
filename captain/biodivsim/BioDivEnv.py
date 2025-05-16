@@ -291,7 +291,8 @@ class BioDivEnv(gym.Env):
                  use_small_grid=False,
                  K_species=None,
                  reward_min_protection=0,
-                 reference_grid_pu=None
+                 reference_grid_pu=None,
+                 feature_set=None,
                  ):
         super(BioDivEnv, self).__init__()
 
@@ -425,6 +426,7 @@ class BioDivEnv(gym.Env):
         self.use_small_grid = use_small_grid
         self._K_species = K_species
         self._reward_min_protection = reward_min_protection
+        self.feature_set = feature_set
         self.reset()
 
     def _initEnv(self):
@@ -938,7 +940,7 @@ class BioDivEnv(gym.Env):
                 print("step", self.bioDivGrid._counter, self.currentIteration, self.iterations)
             self.bioDivGrid.step(skip_dispersal=skip_dispersal, update_suitability=update_suitability)
         else:
-            # print("skipping step", self.bioDivGrid._counter, self.currentIteration)
+            # print("\nskipping step", self.bioDivGrid._counter, self.currentIteration)
             pass
 
         # if did_protect == 0:  # finished budget, continue with simulation
