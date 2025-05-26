@@ -1,27 +1,22 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import tifffile as tiff
 import os
-import pandas as pd
 import scipy.ndimage
 import seaborn as sns
-import h5py
-import geopandas as gpd
 import geopandas as gpd
 import pandas as pd
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
-import os
+import warnings
+warnings.filterwarnings("ignore", message="Dataset has no geotransform, gcps, or rpcs.", category=UserWarning)
 import rioxarray as rxr
 import rasterio
-import earthpy as et
+# import earthpy as et
 from shapely.geometry import Polygon, shape, Point
 from shapely.ops import cascaded_union, unary_union
 from rasterio.enums import Resampling
 from geocube.api.core import make_geocube
 from geocube.rasterize import rasterize_points_griddata
-import captain as cn
 import glob
 import matplotlib.backends.backend_pdf
 from .misc import get_rnd_gen, print_update

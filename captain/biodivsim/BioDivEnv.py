@@ -817,13 +817,13 @@ class BioDivEnv(gym.Env):
         # if self._verbose:
         #     print(self.lastObs.stats_quadrant[0:5,:])
         # this returns an observation, the reward, a flag to indicate the end of the experiment and additions info in a dict
-        # execute action and pay cost pay cost of the action
+        # execute action and pay cost of the action
         self.lastActionType = action.actionType
 
         if self.runMode == RunMode.ORACLE:
             # only allowed action is protect and do observe at no cost
-            if action.actionType != ActionType.Protect:
-                raise Exception("only allowed action is protect in ORACLE mode")
+            # if action.actionType != ActionType.Protect:
+            #     raise Exception("only allowed action is protect in ORACLE mode")
             if (
                 self.currentIteration < TIMETOPROTECT
             ):  # before step 3 some features are not available
@@ -913,7 +913,7 @@ class BioDivEnv(gym.Env):
             d1 = np.round(np.mean(self.bioDivGrid._disturbance_matrix), 2)
             d2 = np.round(np.mean(self.bioDivGrid._selective_disturbance_matrix), 2)
             # TODO: improve screen output
-            s = f"Step: {1 + self.currentIteration}"
+            s = f"Time step: {self.bioDivGrid._counter} (step: {self.currentIteration})"
             if self.runMode == RunMode.PROTECTATONCE:
                 if did_protect == 1:
                     self.tmp += 1
@@ -923,11 +923,11 @@ class BioDivEnv(gym.Env):
 
             screen_out = s + \
                 f" N. protected cells: {np.sum(self.bioDivGrid.protection_matrix > 0.)}" + \
-                f" Disturbance: {np.round(d1,2)}, {np.round(d2,2)}" + \
                 f" Budget: {np.round(self.budget,2)}" + \
                 f" N. species: {self.bioDivGrid.numberOfSpecies()}" + \
-                f" Carbon: {np.round(np.log10(1 + self.current_carbon), 2)}" + \
                 f" Population: {np.round(np.log10(np.sum(self.bioDivGrid.h)), 2)}"
+                # f" Disturbance: {np.round(d1,2)}, {np.round(d2,2)}" + \
+                # f" Carbon: {np.round(np.log10(1 + self.current_carbon), 2)}" + \
 
             if self.dynamic_print:
                 print_update(screen_out)

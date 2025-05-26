@@ -99,6 +99,7 @@ class ConfigOptimPolicy():
                  sp_carbon=None,
                  pre_steps = 0,
                  reference_grid_pu = None,
+                 protection_actions_per_step = None,
                  verbose=True
                  ):
         self.seed = rnd_seed
@@ -170,6 +171,7 @@ class ConfigOptimPolicy():
         self.sp_carbon = sp_carbon
         self.pre_steps = pre_steps
         self.reference_grid_pu = reference_grid_pu
+        self.protection_actions_per_step = protection_actions_per_step
         self.verbose = verbose
 
     def set_ext_risk_class(self, ex: ExtinctionRisk):

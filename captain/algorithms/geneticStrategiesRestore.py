@@ -202,19 +202,31 @@ class EVOLUTIONBoltzmannBatchEmpirical(EVOLUTIONBoltzmannBatchRunner):
 
         # for t in range(1, env.iterations):  # Don't infinite loop while learning
         counter = 0
+        stop_observing = False
         while True:
             # print("policy.reset_lastObs(None)", env.currentIteration,
-            #        env.bioDivGrid._counter, self._actions_per_step, counter)
+            #         env.bioDivGrid._counter, self._actions_per_step, counter)
             skip_env_step = counter % self._actions_per_step != 0
             if skip_env_step:
                 env.set_calc_reward = False
             else:
                 env.set_calc_reward = True
-            action = self.select_action(state, info, policy)
+
+            if stop_observing is False:
+                action = self.select_action(state, info, policy)
+                if info["NumberOfProtectedCells"] + self._protection_per_step >= env._max_n_protected_cells:
+                    stop_observing = True
+            else:
+                action = None
+
+            # if action is not None:
+            #     print("action", len(action.value), self._actions_per_step,
+            #           np.sum(env.bioDivGrid.protection_matrix > 0.) + self._protection_per_step,
+            #           env._max_n_protected_cells)
             state, reward, done, info = env.step(action, skip_env_step=skip_env_step,
                                                  update_suitability=True, skip_dispersal=self._skip_dispersal)
 
-            print("\nself.feature_update_per_step", self.feature_update_per_step)
+            # print("\nself.feature_update_per_step", self.feature_update_per_step)
             if skip_env_step is False:
                 env.species_risk_criteria.update_pop_sizes(env.bioDivGrid)
 
@@ -231,6 +243,7 @@ class EVOLUTIONBoltzmannBatchEmpirical(EVOLUTIONBoltzmannBatchRunner):
                     env.bioDivGrid.h[self._return_species_data]
                 )
             if done:
+                # if env.bioDivGrid._counter == env.iterations:
                 break
 
         if self._return_species_data is not None:
