@@ -55,3 +55,25 @@ def parse_str(config_entry):
     else:
         return np.array(var)
 
+
+
+def match_taxa(trait_tbl, species_names, species_col_name=None):
+    # Set the 'ID' column as the index of the DataFrame
+    if species_col_name is None:
+        print("Taking first column as taxon ID")
+        species_col_name = trait_tbl.columns[0]
+    df_indexed = trait_tbl.set_index(species_col_name)
+    # Reindex the DataFrame using the desired order of IDs
+    df_reordered = df_indexed.reindex(species_names)
+    # Reset the index to make 'ID' a column again if needed
+    trait_tbl = df_reordered.reset_index()
+
+    if np.all(np.array(species_names) == trait_tbl[species_col_name].to_numpy()):
+        pass
+    else:
+        print("\nWarning! Some taxa names do not match!\n")
+        species_names = np.array(np.array(species_names))
+        print(species_names[(species_names == trait_tbl.iloc[:, 0].to_numpy()) == 0])
+        sys.exit("exiting.")
+
+    return trait_tbl, species_col_name
