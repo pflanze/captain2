@@ -34,7 +34,7 @@ requirements_list = [
     "geopandas==0.14.3",
     "rioxarray==0.14.0",
     "rasterio==1.3.6",
-    "earthpy==0.9.4",
+    # "earthpy==0.9.4",
     "geopy==2.4.1",
     "shapely==2.0.1",
     "geocube==0.4.0",

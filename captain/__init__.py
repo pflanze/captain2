@@ -9,11 +9,13 @@ Using artificial intelligence to optimize ecological restoration for climate and
 (2025) bioRxiv, DOI:10.1101/2025.01.31.635975
     
 """
-
+from . import utilities
+from . import plot
 from . import biodivsim
 from . import biodivinit
 from . import algorithms
 from . import agents
+
 from .biodivinit import PhyloGenerator
 from .biodivinit import SimulatorInit
 
@@ -38,5 +40,4 @@ from .agents.policy import *
 # from .utilities.empirical_data_parser import *
 from .utilities.metrics import *
 from .utilities.tf_nn import *
-from . import plot
 

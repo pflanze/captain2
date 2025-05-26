@@ -13,7 +13,7 @@ import pickle
 import sys, os
 
 from ..biodivsim.CellClass import *
-from ..utilities.misc import print_update
+from captain.utilities.misc import print_update
 
 np.set_printoptions(suppress=True, precision=3)  # prints floats, no scientific notation
 

@@ -3,8 +3,7 @@ import numpy as np
 
 from numba import jit
 import pickle
-from ..utilities.misc import print_update
-
+from captain.utilities.misc import print_update
 
 @jit(nopython=True)  # compiled by numba: 30X speedup
 def get_all_to_all_dist_jit(coord, n_cells):

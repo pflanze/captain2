@@ -2,8 +2,8 @@ import sys
 import numpy as np
 import scipy
 from ..agents import state_monitor as state_monitor
-from ..plot.plot_features import plot_features
-from ..utilities import metrics
+from captain.plot.plot_features import plot_features
+from captain.utilities import metrics
 
 DEBUG = 0
 class PolicyNN(object):
