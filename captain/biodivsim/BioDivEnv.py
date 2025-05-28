@@ -797,7 +797,7 @@ class BioDivEnv(gym.Env):
 
     def getExtinction_risk_labels(self, grid=None):
         if grid is None:
-            return self.species_risk_criteria.classify_species(self.bioDivGrid)
+            return self.species_risk_criteria.classify_species(state = self.bioDivGrid)
         else:
             return self.species_risk_criteria.classify_species(grid)
 
@@ -1075,8 +1075,8 @@ class BioDivEnv(gym.Env):
 
 
             #--- NEW REWARD
-            avg_protection_rl_class = np.ones(5)
-            for i in range(5):
+            avg_protection_rl_class = np.ones(self.species_risk_criteria.n_labels)
+            for i in range(self.species_risk_criteria.n_labels):
                 if i in rl:
                     avg_protection_rl_class[i] = 1 - np.mean(pr_fr[rl == i])
                 # elif i == 4:  # no LC in the dataset
@@ -1119,23 +1119,44 @@ class BioDivEnv(gym.Env):
                 #       np.sum(self.bioDivGrid.getCarbonValue_cell()))
                 self._init_total_carbon = np.sum(self.bioDivGrid.getCarbonValue_cell())
 
-            tot_reward = np.sum(self.bioDivGrid.getCarbonValue_cell()) - self._init_total_carbon
-            tot_reward = tot_reward / (self._total_natural_carbon - self._init_total_carbon) * 100
-            reward_c = (tot_reward * self._reward_weights['carbon'] - self._cumrewards[0])
+            if 'carbon' in self._reward_weights.keys():
+                tot_reward = np.sum(self.bioDivGrid.getCarbonValue_cell()) - self._init_total_carbon
+                tot_reward = tot_reward / (self._total_natural_carbon - self._init_total_carbon) * 100
+                reward_c = (tot_reward * self._reward_weights['carbon'] - self._cumrewards['carbon'])
+                self._step_rewards['carbon'] = float(reward_c)
+
+
+            if 'population' in self._reward_weights.keys():
+
+                tot_reward = self.bioDivGrid.protectedIndPerSpecies() / self.bioDivGrid.individualsPerSpecies()
+                pop_scaler = 0.5 # values < 1 give more importance to first portion of protected population
+                # e.g. np.linspace(0, 1, 11) ** 0.5
+                tot_reward = np.mean(tot_reward ** pop_scaler) * 100
+                reward_c = (tot_reward * self._reward_weights['population'] - self._cumrewards['population'])
+                self._step_rewards['population'] = float(reward_c)
+
 
             # species reward
-            rl = self.getExtinction_risk_labels()
-            protected_pop_per_species = self.bioDivGrid.protectedIndPerSpecies()
-            pop_size = self.bioDivGrid.individualsPerSpecies()
-            pr_fr = np.zeros(self.n_species)
-            pr_fr[pop_size > 0] = 1 - (protected_pop_per_species[pop_size > 0] / pop_size[pop_size > 0])
-            avg_protection_rl_class = np.ones(5)
-            for i in range(5):
-                if i in rl:
-                    avg_protection_rl_class[i] = 1 - np.mean(pr_fr[rl == i])
-            tot_reward_species = np.sum(avg_protection_rl_class * -self.species_risk_criteria.risk_weights)
-            tot_reward_species = tot_reward_species / np.sum(-self.species_risk_criteria.risk_weights) * 100
-            reward_sp = (tot_reward_species * self._reward_weights['species_risk'] - self._cumrewards[1])
+            if 'species_risk' in self._reward_weights.keys():
+                rl = self.getExtinction_risk_labels()
+                protected_pop_per_species = self.bioDivGrid.protectedIndPerSpecies()
+                pop_size = self.bioDivGrid.individualsPerSpecies()
+                pr_fr = np.zeros(self.n_species)
+                pr_fr[pop_size > 0] = 1 - (protected_pop_per_species[pop_size > 0] / pop_size[pop_size > 0])
+                avg_protection_rl_class = np.ones(self.species_risk_criteria.n_labels)
+                for i in range(self.species_risk_criteria.n_labels):
+                    if i in rl:
+                        avg_protection_rl_class[i] = 1 - np.mean(pr_fr[rl == i])
+                tot_reward_species = np.sum(avg_protection_rl_class * -self.species_risk_criteria.risk_weights)
+                tot_reward_species = tot_reward_species / np.sum(-self.species_risk_criteria.risk_weights) * 100
+                reward_sp = (tot_reward_species * self._reward_weights['species_risk'] - self._cumrewards['species_risk'])
+                self._step_rewards['species_risk'] = float(reward_sp)
+
+            if 'genetic_distance' in self._reward_weights.keys():
+                if self._env_layers is None:
+                    pass
+                else:
+                    print("work in progress")
 
             #---
             # rew = np.sum(self.risk_label_counts(normalize=False) * np.array([0, 0.5, 0.707, 0.866, 1]))
@@ -1143,13 +1164,17 @@ class BioDivEnv(gym.Env):
             # reward_sp = (rew_norm * self._reward_weights['species_risk'] - self._cumrewards[1])
             #---
 
-            # reward cost
-            tot_reward_cost = self.budget / self._initialBudget * 100
-            reward_cost = (tot_reward_cost * self._reward_weights['cost'] - self._cumrewards[2])
             # print("\n reward_c: %s  reward_sp: %s  reward_cost: %s %s" % (reward_c, reward_sp, reward_cost, tot_reward_cost))
             # print(self.budget , self._initialBudget)
             # print("\nC:", self._init_total_carbon, self._total_natural_carbon, np.sum(self.bioDivGrid.getCarbonValue_cell()) )
-            reward = reward_c + reward_sp + reward_cost
+            # reward cost
+            if 'cost' in self._reward_weights.keys():
+                tot_reward_cost = self.budget / self._initialBudget * 100
+                reward_cost = (tot_reward_cost * self._reward_weights['cost'] - self._cumrewards['cost'])
+                self._step_rewards['cost'] = float(reward_cost)
+
+            reward = sum(self._step_rewards.values())
+            # print("\n\nstep_rewards", self._step_rewards, reward)
 
         else:
             sys.exit("\nrewardMode not defined!\n")
@@ -1182,9 +1207,14 @@ class BioDivEnv(gym.Env):
             info['reward_c'] = self._cumrewards[0]
             info['reward_sp'] = self._cumrewards[1]
         elif self.rewardMode == "pareto_mlt":
-            self._cumrewards += np.array([reward_c, reward_sp, reward_cost])
-            info['reward_carbon'] = self._cumrewards[0]
-            info['reward_species'] = self._cumrewards[1]
+            # self._cumrewards += np.array([reward_c, reward_sp, reward_cost])
+            self._cumrewards = {key: self._cumrewards.get(key, 0) + self._step_rewards.get(key, 0) for key in set(self._cumrewards) | set(self._step_rewards)}
+
+            for k in self._cumrewards.keys():
+                info[k] = self._cumrewards[k]
+            #
+            # info['reward_carbon'] = self._cumrewards[0]
+            # info['reward_species'] = self._cumrewards[1]
 
         else:
             self._cumrewards += reward
@@ -1212,7 +1242,9 @@ class BioDivEnv(gym.Env):
                 print(self.get_protected_fraction())
                 print(np.sum(self.bioDivGrid.protection_matrix > 0), np.mean(self.bioDivGrid.protection_matrix))
             else:
-                print("\nReward:", reward, self._cumrewards, self.risk_label_counts())
+                print("\nReward:", reward,
+                      {key: round(value, 2) for key, value in self._cumrewards.items()},
+                      self.risk_label_counts())
                 # tmp = self.bioDivGrid.protectedRangePerSpecies() / (self.bioDivGrid.geoRangePerSpecies() + SMALL_NUMBER)
                 # print(tmp[:10])
                 # print(self.get_protected_fraction()[:10])
@@ -1270,7 +1302,11 @@ class BioDivEnv(gym.Env):
         if self.rewardMode == "ext_risk_carbon":
             self._cumrewards = np.zeros(2)
         elif self.rewardMode == "pareto_mlt":
-            self._cumrewards = np.zeros(3)
+            self._cumrewards = {str(key): float(0) for key in self._reward_weights.keys()}
+            self._step_rewards = {str(key): float(0) for key in self._reward_weights.keys()}
+            # print("\n\nself._cumrewards", self._cumrewards, self._reward_weights.keys())
+            # print("self._step_rewards", self._step_rewards)
+
         else:
             self._cumrewards = np.zeros(1)
 
@@ -1310,7 +1346,8 @@ class BioDivEnv(gym.Env):
         if self.rewardMode == "ext_risk_carbon":
             self._cumrewards = np.zeros(2)
         elif self.rewardMode == "pareto_mlt":
-            self._cumrewards = np.zeros(3)
+            self._cumrewards = {key: 0 for key in self._reward_weights.keys()}
+            self._step_rewards = {key: 0 for key in self._reward_weights.keys()}
         else:
             self._cumrewards = np.zeros(1)
 
@@ -1476,7 +1513,11 @@ class BioDivEnv(gym.Env):
         self._total_natural_carbon = c
 
     def set_reward_weights(self, rw):
+        if self._verbose:
+            print("Setting reward_weights", rw)
         self._reward_weights = rw
+        self._cumrewards = {str(key): float(0) for key in self._reward_weights.keys()}
+        self._step_rewards = {str(key): float(0) for key in self._reward_weights.keys()}
 
     def set_grid_obj_h_previous(self, grid_obj_h):
         self.grid_obj_previous._h = grid_obj_h

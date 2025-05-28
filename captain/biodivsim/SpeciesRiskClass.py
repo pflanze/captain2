@@ -72,7 +72,7 @@ class ExtinctionRisk():
 
         return labels
 
-    def update_pop_sizes(self):
+    def update_pop_sizes(self, _):
         pass
 
     def predict_future_species(self, _):
@@ -848,7 +848,13 @@ class ExtinctioRiskProtectedRangeFuture(ExtinctionRisk):
 
 
 
+class NoExtinctioRisk(ExtinctionRisk):
+    def __init__(self, natural_state: SimGrid):
+        self.x = 0
+        super().__init__(natural_state)
 
+    def classify_species(self, state: SimGrid):
+        return np.ones(state.numberOfSpecies())
 
 
 

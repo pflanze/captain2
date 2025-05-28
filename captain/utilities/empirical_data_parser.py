@@ -7,9 +7,9 @@ import pandas as pd
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
+import rioxarray as rxr
 import warnings
 warnings.filterwarnings("ignore", message="Dataset has no geotransform, gcps, or rpcs.", category=UserWarning)
-import rioxarray as rxr
 import rasterio
 # import earthpy as et
 from shapely.geometry import Polygon, shape, Point
@@ -118,6 +118,7 @@ def get_habitat_suitability(h_tmp, lower=0.25, integer=True):
 def plot_map(m, z=None, cmap=None, title=None, nan_to_zero=False,
              fig_s=[6.5, 5.5], show=False, outfile=None, dpi=250,
              vmin=None, vmax=None):
+    fig_s[0] = fig_s[1] * (m.shape[1] / m.shape[0])
     fig = plt.figure(figsize=(fig_s[0], fig_s[1]))
     fig.tight_layout()
     m_plotted = (m + 0).astype(float)
@@ -499,11 +500,13 @@ class plot_map_class():
     def plot(self, m, title=None, show=False, outfile=None, cmap="GnBu",
              vmin=None, vmax=None):
 
+
         if self.reference_grid is not None:
             m_transf = graph_to_grid(m, self.reference_grid)
         else:
             m_transf = m + 0
 
+        self.fig_s[0] = self.fig_s[1] * (m_transf.shape[1] / m_transf.shape[0])
         fig = plt.figure(figsize=(self.fig_s[0], self.fig_s[1]))
         fig.tight_layout()
         m_plotted = (m_transf + 0).astype(float)
@@ -531,6 +534,16 @@ class plot_map_class():
 
 
 
+def plot_env_layers(layer_names, layers, reference_grid_pu_nan, wd=None):
+    for i in range(len(layer_names)):
+        if wd is not None:
+            plot_map(layers[i], z=reference_grid_pu_nan, nan_to_zero=False,
+                         cmap="RdYlBu_r", show=False, title=layer_names[i], vmin=0,
+                         outfile=os.path.join(wd, layer_names[i] +".png"), dpi=250)
+        else:
+            plot_map(layers[i], z=reference_grid_pu_nan, nan_to_zero=False,
+                         cmap="RdYlBu_r", show=True, title=layer_names[i], vmin=0,
+                         outfile=None, dpi=250)
 
 
 
