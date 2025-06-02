@@ -100,6 +100,8 @@ class ConfigOptimPolicy():
                  pre_steps = 0,
                  reference_grid_pu = None,
                  protection_actions_per_step = None,
+                 observe_steps_per_time_step=None,
+                 cells_to_be_protected_per_observe_step=None,
                  verbose=True
                  ):
         self.seed = rnd_seed
@@ -173,6 +175,9 @@ class ConfigOptimPolicy():
         self.reference_grid_pu = reference_grid_pu
         self.protection_actions_per_step = protection_actions_per_step
         self.verbose = verbose
+        self.observe_steps_per_time_step = observe_steps_per_time_step
+        self.cells_to_be_protected_per_observe_step = cells_to_be_protected_per_observe_step
+        self.reference_grid_pu_nan = None
 
     def set_ext_risk_class(self, ex: ExtinctionRisk):
         self.ext_risk_class = ex

@@ -925,8 +925,8 @@ class BioDivEnv(gym.Env):
                 f" N. protected cells: {np.sum(self.bioDivGrid.protection_matrix > 0.)}" + \
                 f" Budget: {np.round(self.budget,2)}" + \
                 f" N. species: {self.bioDivGrid.numberOfSpecies()}" + \
-                f" Population: {np.round(np.log10(np.sum(self.bioDivGrid.h)), 2)}"
-                # f" Disturbance: {np.round(d1,2)}, {np.round(d2,2)}" + \
+                f" Population: {np.round(np.log10(np.sum(self.bioDivGrid.h)), 2)}" + \
+                f" Disturbance: {np.round(d1,2)}, {np.round(d2,2)}"
                 # f" Carbon: {np.round(np.log10(1 + self.current_carbon), 2)}" + \
 
             if self.dynamic_print:

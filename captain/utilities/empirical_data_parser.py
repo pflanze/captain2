@@ -116,9 +116,12 @@ def get_habitat_suitability(h_tmp, lower=0.25, integer=True):
 
 
 def plot_map(m, z=None, cmap=None, title=None, nan_to_zero=False,
-             fig_s=[6.5, 5.5], show=False, outfile=None, dpi=250,
+             fig_s=None, show=False, outfile=None, dpi=250,
              vmin=None, vmax=None):
-    fig_s[0] = fig_s[1] * (m.shape[1] / m.shape[0])
+    if fig_s is None:
+        fig_s = [0, 5.5]
+        fig_s[0] = fig_s[1] * (m.shape[1] / m.shape[0])
+
     fig = plt.figure(figsize=(fig_s[0], fig_s[1]))
     fig.tight_layout()
     m_plotted = (m + 0).astype(float)
@@ -491,7 +494,11 @@ class plot_map_class():
     def __init__(self,
                  z=None,
                  nan_to_zero=False,
-                 fig_s=[6.5, 5.5]):
+                 fig_s=None):
+        if fig_s is None:
+            fig_s = [0, 5.5]
+            fig_s[0] = fig_s[1] * (z.shape[1] / z.shape[0])
+
         self.reference_grid = z
         self.nan_to_zero = nan_to_zero
         self.fig_s = fig_s
@@ -506,7 +513,6 @@ class plot_map_class():
         else:
             m_transf = m + 0
 
-        self.fig_s[0] = self.fig_s[1] * (m_transf.shape[1] / m_transf.shape[0])
         fig = plt.figure(figsize=(self.fig_s[0], self.fig_s[1]))
         fig.tight_layout()
         m_plotted = (m_transf + 0).astype(float)
@@ -534,14 +540,14 @@ class plot_map_class():
 
 
 
-def plot_env_layers(layer_names, layers, reference_grid_pu_nan, wd=None):
+def plot_env_layers(layer_names, layers, reference_grid_pu_nan, wd=None, fig_s=None):
     for i in range(len(layer_names)):
         if wd is not None:
-            plot_map(layers[i], z=reference_grid_pu_nan, nan_to_zero=False,
+            plot_map(layers[i], z=reference_grid_pu_nan, nan_to_zero=False, fig_s=fig_s,
                          cmap="RdYlBu_r", show=False, title=layer_names[i], vmin=0,
                          outfile=os.path.join(wd, layer_names[i] +".png"), dpi=250)
         else:
-            plot_map(layers[i], z=reference_grid_pu_nan, nan_to_zero=False,
+            plot_map(layers[i], z=reference_grid_pu_nan, nan_to_zero=False, fig_s=fig_s,
                          cmap="RdYlBu_r", show=True, title=layer_names[i], vmin=0,
                          outfile=None, dpi=250)
 
