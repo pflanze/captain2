@@ -19,6 +19,7 @@ from concurrent.futures import ProcessPoolExecutor
 import collections
 from .env_setup import *
 from ..biodivsim.BioDivEnv import *
+import multiprocessing
 
 DEBUG = 0
 
@@ -52,6 +53,50 @@ class EVOLUTIONBoltzmannBatchRunner(object):
         #     print("Setting self._deterministic to False")
         #     self._deterministic = False
 
+    def get_indices_of_n_max_random_ties(self, arr: np.ndarray) -> np.ndarray:
+        """
+        Gets the indices of the N maximum values in a NumPy array.
+        If there are ties for the Nth maximum value, they are chosen randomly.
+
+        Args:
+            arr (np.ndarray): The input NumPy array.
+            N (int): The number of maximum values whose indices are desired.
+
+        Returns:
+            np.ndarray: An array of N indices corresponding to the maximum values.
+                        The order of indices in the output is not guaranteed to be sorted
+                        by value, as ties are chosen randomly.
+        """
+        if self._protection_per_step <= 0:
+            return np.array([], dtype=int)
+        if self._protection_per_step >= arr.size:
+            # If N is greater than or equal to array size, return all shuffled indices
+            return self._rs.permutation(np.arange(arr.size))
+
+        # Step 1: Find the value at the N-th largest position using argpartition
+        partitioned_values = np.partition(arr, -self._protection_per_step)
+        threshold_value = partitioned_values[-self._protection_per_step]
+        # Step 2: Get indices of elements strictly greater than the threshold value
+        above_threshold_indices = np.where(arr > threshold_value)[0]
+        # Step 3: Get indices of elements equal to the threshold value (the ties)
+        at_threshold_indices = np.where(arr == threshold_value)[0]
+        # Step 4: Determine how many more indices are needed from the ties
+        num_needed_from_ties = self._protection_per_step - len(above_threshold_indices)
+
+        if num_needed_from_ties <= 0:
+            return above_threshold_indices[np.argsort(arr[above_threshold_indices])[-self._protection_per_step:]]
+        else:
+            # Step 5: Randomly select the required number of indices from the tied values
+            selected_tied_indices = self._rs.choice(
+                at_threshold_indices,
+                size=num_needed_from_ties,
+                replace=False  # Important: ensures unique indices
+            )
+
+            # Step 6: Combine the indices strictly above the threshold with the randomly selected tied indices
+            final_indices = np.concatenate((above_threshold_indices, selected_tied_indices))
+
+            return final_indices
 
     def select_action(self, state, info, policy):
         # print(np.sum(state['protection_matrix']), "select next action")
@@ -59,13 +104,15 @@ class EVOLUTIONBoltzmannBatchRunner(object):
         #       "grid_obj_most_recent", state['grid_obj_most_recent'].numberOfIndividuals())
         state = self._state_adaptor.adapt(state, info)
         probs = policy.probs(state)
+        # print(np.unique(probs)[::-1][:10])
         if self._deterministic:
             if self._protection_per_step == 1:
                 action = np.argmax(probs)
             else:
                 # take the top N values
                 # https://stackoverflow.com/questions/6910641/how-do-i-get-indices-of-n-maximum-values-in-a-numpy-array
-                action_vec = np.argpartition(probs, -self._protection_per_step)[-self._protection_per_step:]
+                # action_vec = np.argpartition(probs, -self._protection_per_step)[-self._protection_per_step:]
+                action_vec = self.get_indices_of_n_max_random_ties(probs)
                 action = ActionVec(ActionType.Protect, action_vec, action_vec)
                 return action
         else:
@@ -163,6 +210,7 @@ class EVOLUTIONBoltzmannBatchEmpirical(EVOLUTIONBoltzmannBatchRunner):
                  protection_per_step=1,
                  return_species_data=None,
                  skip_dispersal=False,
+                 greedy_search=None,
                  ):
         """
         state_adaptor = RichStateAdaptor()
@@ -176,6 +224,7 @@ class EVOLUTIONBoltzmannBatchEmpirical(EVOLUTIONBoltzmannBatchRunner):
         self.feature_update_per_step = feature_update_per_step
         self._actions_per_step = actions_per_step
         self._skip_dispersal = skip_dispersal
+        self._greedy_search = greedy_search
 
 
     def run_episode(self, env, policy, noise):
@@ -185,7 +234,8 @@ class EVOLUTIONBoltzmannBatchEmpirical(EVOLUTIONBoltzmannBatchRunner):
         policy.perturbeParams(noise)
 
         # # init env (randomize and re-load pickle file)
-        env.set_reward_weights(self._reward_weights)
+        if self._reward_weights is not None:
+            env.set_reward_weights(self._reward_weights)
 
         state = env._enrichObs()
         info = env._getInfo()
@@ -371,7 +421,7 @@ def runBatchGeneticStrategyRichPolicy(batch_size,
         sys.exit("\n\nResolution not allowed!\n\n")
     else:
         OUTPUT = int(OUTPUT)
-        print("Number of protection units: ", OUTPUT)
+        print("Number of protection units: ", OUTPUT, init_data.shape)
     
     distb_obj, selectivedistb_obj = get_disturbance(disturbance_mode)
     disturbance_sensitivity = np.zeros(n_species) + np.random.random(n_species)
@@ -661,7 +711,8 @@ def runBatchGeneticStrategyRichPolicy(batch_size,
                 l = l + [avg_reward_c, avg_reward_sp]
 
             l = l + list(policy.coeff)
-            writer.writerow(l)
+            l_no_nan = [np.nan_to_num(i) for i in l]
+            writer.writerow(l_no_nan)
 
 
 def train_restore_model(rnd_seed=1234,
@@ -821,6 +872,7 @@ def runBatchGeneticStrategyEmpirical(envList,
                                      reward_weights=None,
                                      return_species_data=None,
                                      skip_dispersal=False,
+                                     greedy_search=None,
                                      ):
     batch_size = len(envList)
     RESOLUTION = resolution
@@ -915,7 +967,8 @@ def runBatchGeneticStrategyEmpirical(envList,
         sp_threshold=sp_threshold_feature_extraction,
         quadrant_coords_list=envList[0].quadrant_coords_list,
         wd_plot=wd_output,
-        protection_constraint=protection_constraint
+        protection_constraint=protection_constraint,
+        greedy_search=greedy_search,
     )
 
     print("policy._coeff", policy._coeff, policy.coeff)
@@ -956,7 +1009,16 @@ def runBatchGeneticStrategyEmpirical(envList,
                     EvolutionRunnerInput(env, policy, evolutionRunner, noise)
                     for env, noise in zip(env_list_init, param_noise)
                 ]
-                results = list(pool.map(runOneEvolutionEpoch, runnerInputList))
+
+                if os.name == 'posix':  # For Unix-based systems (macOS, Linux)
+                    ctx = multiprocessing.get_context('fork')
+                else:  # For Windows
+                    ctx = multiprocessing.get_context('spawn')
+
+                with ctx.Pool(max_workers) as pool:
+                    results = pool.map(runOneEvolutionEpoch, runnerInputList)
+
+                # results = list(pool.map(runOneEvolutionEpoch, runnerInputList))
         else:
             runnerInputList = [
                 EvolutionRunnerInput(env, policy, evolutionRunner, noise)
@@ -1039,7 +1101,8 @@ def runBatchGeneticStrategyEmpirical(envList,
                 l = l + [avg_reward_c, avg_reward_sp]
 
             l = l + list(policy.coeff)
-            writer.writerow(l)
+            l_no_nan = [np.nan_to_num(i) for i in l]
+            writer.writerow(l_no_nan)
 
         if plot_res_class is not None:
             plot_file_name = "tmp_res_epoch_%s.png" % epoch

@@ -113,6 +113,10 @@ def get_sdm_data(sdm_files, taxon_index, cropped=None):
         sp_data = np.load(sdm_files[taxon_index], allow_pickle=True)
         sp_data_cropped = sp_data['arr_0'].item()['x']
         taxon_name = os.path.basename(sdm_files[taxon_index]).split(".npz")[0]
+    elif ".npy" in sdm_files[taxon_index]:
+        sp_data_cropped = np.load(sdm_files[taxon_index])
+        taxon_name = os.path.basename(sdm_files[taxon_index]).split(".npy")[0]
+
     return sp_data_cropped, taxon_name
 
 def crop_data(layer, cropped):
@@ -120,26 +124,30 @@ def crop_data(layer, cropped):
     return layer_np
 
 
-def get_data_from_list(sdm_dir, tag="/*.tif", max_species_cutoff=None, rescale=False, zero_to_nan=False):
+def get_data_from_list(sdm_dir, tag="/*.tif", max_species_cutoff=None,
+                       rescale=False, zero_to_nan=False, global_rescale=False):
     sdm_files = np.sort(glob.glob(sdm_dir + tag))
     sdms = []
     sp_names = []
     for i in range(len(sdm_files)):
         sp_data, taxon_name = get_sdm_data(sdm_files, i, cropped=None)
         if rescale:
-            sp_data /= np.nanmax(sp_data)
+            sp_data = sp_data.astype(float) / np.nanmax(sp_data.astype(float))
         sdms.append(sp_data)
         sp_names.append(taxon_name)
         if i + 1 == max_species_cutoff:
             break
 
     sdms = np.squeeze(np.array(sdms))  # shape = (species, lon, lat)
+    if global_rescale:
+        sdms = sdms.astype(float) / np.nanmax(sdms.astype(float))
+
     if zero_to_nan:
         sdms[sdms == 0] = np.nan
     return sdms, sp_names
 
 
-def get_graph(sdms):
+def get_graph(sdms, grid_length=None):
     species_richness = np.nansum(sdms, axis=0)
     original_grid_shape = species_richness.shape
     # MAKE IT A GRAPH without gaps
@@ -148,14 +156,16 @@ def get_graph(sdms):
     reference_grid_pu_nan[reference_grid_pu_nan == 0] = np.nan
     # reduce coordinates
     xy_coords = np.meshgrid(np.arange(original_grid_shape[1]), np.arange(original_grid_shape[0]))
-    graph_coords, _, __ = grid_to_graph(np.array(xy_coords), reference_grid_pu)
+    graph_coords, _, __ = grid_to_graph(np.array(xy_coords), reference_grid_pu, grid_length=grid_length)
     return original_grid_shape, reference_grid_pu, reference_grid_pu_nan, xy_coords, graph_coords
 
 
-def grid_to_graph(grid, reference_grid_pu, n_pus=None, nan_to_zero=False):
+def grid_to_graph(grid, reference_grid_pu, n_pus=None, nan_to_zero=False, grid_length=None,
+                  return_dict=None, layer_name=None):
     if n_pus is None:
         n_pus = reference_grid_pu[reference_grid_pu > 0].size
-    grid_length = np.round(np.sqrt(n_pus)).astype(int) + 1
+    if grid_length is None:
+        grid_length = np.round(np.sqrt(n_pus)).astype(int) + 1
     if grid_length % 2 != 0: # make it a multiple of 2
         grid_length += 1
 
@@ -183,9 +193,22 @@ def grid_to_graph(grid, reference_grid_pu, n_pus=None, nan_to_zero=False):
     if nan_to_zero:
         m_graph[np.isnan(m_graph)] = 0
 
+    if return_dict is not None:
+        if layer_name is None:
+            if len(grid.shape) == 3:
+                layer_name = ["dat_%s" % i for i in range(m_graph.shape[0])]
+                graph_dict = dict(zip(layer_name, list(m_graph)))
+            else:
+                graph_dict = {"dat_0": m_graph}
+        else:
+            graph_dict = dict(zip(layer_name, list(m_graph)))
+
+        m_graph = graph_dict
+
     return m_graph, n_pus, grid_length
 
-def graph_to_grid(graph, reference_grid_pu, n_pus=None, zero_to_nan=False):
+def graph_to_grid(graph, reference_grid_pu, n_pus=None, zero_to_nan=False,
+                  return_dict=None, layer_name=None):
     if n_pus is None:
         n_pus = reference_grid_pu[reference_grid_pu > 0].size
 
@@ -208,6 +231,18 @@ def graph_to_grid(graph, reference_grid_pu, n_pus=None, zero_to_nan=False):
         m_grid[reference_grid_pu > 0] += tmp
         if zero_to_nan:
             m_grid[reference_grid_pu == 0] = np.nan
+
+    if return_dict is not None:
+        if layer_name is None:
+            if len(graph.shape) == 3:
+                layer_name = ["dat_%s" % i for i in range(m_grid.shape[0])]
+                graph_dict = dict(zip(layer_name, list(m_grid)))
+            else:
+                graph_dict = {"dat_0": m_grid}
+        else:
+            graph_dict = dict(zip(layer_name, list(m_grid)))
+
+        m_grid = graph_dict
 
     return m_grid
 
@@ -279,7 +314,57 @@ def convert_npz_folder_to_tiff(npz_folder, tiff_folder=None):
 
 
 
+def array_to_tiff(dat, file_names=None, wd_output="", by_layer=True):
+    try:
+        os.makedirs(wd_output)
+    except FileExistsError:
+        pass
+    if by_layer:
+        if file_names  is None:
+            file_names = ["data_%s.tif" % i for i in range(dat.shape[0])]
+        for i in range(dat.shape[0]):
+            image_data = dat[i]
+            tifffile.imwrite(os.path.join(wd_output, file_names[i]), image_data)
 
+    else:
+        tifffile.imwrite(os.path.join(wd_output, file_names), dat)
+
+
+def rank_cells(layer_dict,
+               numerator=None, # multiply variables
+               denominator=None, # divide
+               num_weights=None,
+               den_weights=None,
+               min_den=0.1, # minimum denominator
+               q=None, # quantile (returns 1 for the top q scoring cells, zero for the others
+               rescale=True, # rescale between 0 and 1
+               func=np.prod
+               ):
+    if numerator is not None:
+        if num_weights is None:
+            num_weights = np.ones(len(numerator))
+        num = np.array([layer_dict[numerator[l]] ** num_weights[l] for l in range(len(numerator))])
+    else:
+        num = 1
+    if denominator is not None:
+        if den_weights is None:
+            den_weights = np.ones(len(denominator))
+        den = np.array([layer_dict[denominator[l]] ** den_weights[l] for l in range(len(denominator))])
+        den[den < min_den] = min_den
+    else:
+        den = 1
+
+    score = func(num, 0) / func(den, 0)
+    if q is not None and q > 0:
+        q30 = np.quantile(score, q=(1 - q))
+        relative_reward = score + 0
+        print(relative_reward[relative_reward > q30].size / relative_reward.size)
+        relative_reward[relative_reward < q30] = 0
+        relative_reward[relative_reward > 0] = 1.
+        score = relative_reward + 0
+    if rescale:
+        score /= np.max(score)
+    return score
 
 
 

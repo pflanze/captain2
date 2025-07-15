@@ -56,14 +56,15 @@ def dispersalDistancesThresholdCoord(length: int,
                                      threshold=3
                                      ):
     print("calculating distances with threshold...")
-    dumping_dist = np.zeros((length, length, length, length))
+    exp_rate = 1.0 / lambda_0
+    dumping_dist = np.zeros((length, length, length, length), dtype=np.float32)
     for i in range(0, length):
         for j in range(0, length):
+            # cn.print_update("%s / %s, %s" % (i, length, j))
             for n in range(0, length):
                 for m in range(0, length):
                     # print(abs(lat[i,j] - lat[n,m]), abs(lon[i,j] - lon[n,m]) )
                     if abs(lat[i,j] - lat[n,m]) <= threshold and abs(lon[i,j] - lon[n,m]) <= threshold:
-                        exp_rate = 1.0 / lambda_0
                         # relative dispersal probability: always 1 at distance = 0
                         # the actual number of offspring is modulated by growth_rate
                         # print(i, j, n, m)
@@ -71,6 +72,119 @@ def dispersalDistancesThresholdCoord(length: int,
                             -exp_rate * np.sqrt((lat[i,j] - lat[n,m]) ** 2 + (lon[i,j] - lon[n,m]) ** 2)
                         )
     return dumping_dist
+
+
+@jit(nopython=True)
+def dispersalDistancesThresholdCoord2D(length: int,
+                                       lambda_0: float,
+                                       lat_i: float,
+                                       lon_i: float,
+                                       lat: np.ndarray,
+                                       lon: np.ndarray,
+                                       # dumping_dist: np.ndarray,
+                                       threshold=3,
+
+                                       ):
+    exp_rate = 1.0 / lambda_0
+    dumping_dist = np.zeros((length, length), dtype=np.float32)
+    for n in range(0, length):
+        for m in range(0, length):
+            # print(abs(lat[i,j] - lat[n,m]), abs(lon[i,j] - lon[n,m]) )
+            if abs(lat_i - lat[n, m]) <= threshold and abs(lon_i - lon[n, m]) <= threshold:
+                # relative dispersal probability: always 1 at distance = 0
+                # the actual number of offspring is modulated by growth_rate
+                # print(i, j, n, m)
+                dumping_dist[n, m] = np.exp(
+                    -exp_rate * np.sqrt((lat_i - lat[n, m]) ** 2 + (lon_i - lon[n, m]) ** 2)
+                )
+    return dumping_dist
+
+
+def dispersalDistancesThresholdCoord4D(length: int,
+                                     lambda_0: float,
+                                     lat: np.ndarray,
+                                     lon: np.ndarray,
+                                     threshold=3
+                                     ):
+    print("calculating distances with threshold...")
+    exp_rate = 1.0 / lambda_0
+    dumping_dist = np.zeros((length, length, length, length), dtype=np.float32)
+    for i in range(0, length):
+        for j in range(0, length):
+            cn.print_update("%s / %s, %s" % (i, length, j))
+
+
+            x = dispersalDistancesThresholdCoord2D(length, lambda_0, lat[i, j], lon[i, j], lat, lon,
+                                                   np.zeros((length, length), dtype=np.float32), threshold)
+            dumping_dist[i, j] = x + 0
+            del x #, dispersalDistancesThresholdCoord2D
+    return dumping_dist
+
+
+
+def dispersalDistancesThresholdCoord_vectorized(length: int,
+                                                 lambda_0: float,
+                                                 lat: np.ndarray, # Assuming lat has shape (length, length)
+                                                 lon: np.ndarray, # Assuming lon has shape (length, length)
+                                                 threshold: int = 3
+                                                 ) -> np.ndarray: # Specify return type hint
+    print("calculating distances with threshold (vectorized, with lat/lon)...")
+
+    exp_rate = 1.0 / lambda_0
+
+    # Reshape lat and lon arrays for broadcasting
+    # lat_ij: (length, length, 1, 1) to represent lat[i,j] for all i,j
+    # lon_ij: (length, length, 1, 1) to represent lon[i,j] for all i,j
+    lat_ij = lat.reshape(length, length, 1, 1)
+    lon_ij = lon.reshape(length, length, 1, 1)
+
+    # lat_nm: (1, 1, length, length) to represent lat[n,m] for all n,m
+    # lon_nm: (1, 1, length, length) to represent lon[n,m] for all n,m
+    lat_nm = lat.reshape(1, 1, length, length)
+    lon_nm = lon.reshape(1, 1, length, length)
+
+    # Calculate differences in latitude and longitude using broadcasting
+    # These will both have shape (length, length, length, length)
+    delta_lat = lat_ij - lat_nm
+    delta_lon = lon_ij - lon_nm
+
+    # Calculate squared Euclidean distance
+    squared_distance = delta_lat**2 + delta_lon**2
+    distance = np.sqrt(squared_distance)
+
+    # Calculate the exponential term for all combinations
+    # This will also have shape (length, length, length, length)
+    dumping_dist_full = np.exp(-exp_rate * distance)
+
+    # --- Apply the threshold condition ---
+    # Create boolean masks based on absolute differences exceeding threshold
+    # These masks will also have shape (length, length, length, length)
+    lat_within_threshold = np.abs(delta_lat) <= threshold
+    lon_within_threshold = np.abs(delta_lon) <= threshold
+
+    # Combine the masks using logical AND.
+    # An element is True only if *both* lat and lon differences are within threshold.
+    combined_mask = lat_within_threshold & lon_within_threshold
+
+    # Initialize the result array with zeros (outside the loop where it's not needed)
+    # This array will hold the final dumping_dist values, with non-threshold values as 0
+    result_array = np.zeros((length, length, length, length), dtype=np.float32)
+
+    # Use the combined_mask to selectively assign values from dumping_dist_full
+    # Only elements where combined_mask is True will get the calculated value;
+    # others remain 0 as initialized.
+    result_array[combined_mask] = dumping_dist_full[combined_mask]
+
+    return result_array
+
+
+
+
+
+
+
+
+
 
 
 def add_random_diffusion_mortality(
@@ -316,6 +430,7 @@ class SimGrid(object):
             self._K_species3D = None
         self._reference_grid_pu = None
         self._rm_lingering_pops = rm_lingering_pops
+        self._n_pus = None
 
 
     def get_sp_pd_contribution(self):
@@ -334,6 +449,12 @@ class SimGrid(object):
         self._phylo_ed = phylo_ed / np.sum(phylo_ed) * self._n_species
 
     def alphaHistogram(self, disturbanceSensitivity, disturbanceMatrix):
+        # TODO: implement 3D disturbance
+        # print("disturbanceSensitivity.shape", disturbanceSensitivity)
+        # if len(disturbanceSensitivity.shape) == 2:
+        #     "when alphaHistogram==0: nobody dies, when==1: all die"
+        #     return np.einsum("sd,dij->sij", disturbanceSensitivity, disturbanceMatrix)
+        # if len(disturbanceSensitivity.shape) == 1:
         "when alphaHistogram==0: nobody dies, when==1: all die"
         return np.einsum("s,ij->sij", disturbanceSensitivity, disturbanceMatrix)
 
@@ -944,6 +1065,8 @@ class SimGrid(object):
 
     def set_reference_grid_pu(self, g):
         self._reference_grid_pu = g
+        if g is not None:
+            self._n_pus = g[g > 0].size
 
     def set_rm_lingering_pops(self, v):
         self._rm_lingering_pops = v

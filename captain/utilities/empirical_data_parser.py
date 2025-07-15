@@ -540,16 +540,23 @@ class plot_map_class():
 
 
 
-def plot_env_layers(layer_names, layers, reference_grid_pu_nan, wd=None, fig_s=None):
+def plot_env_layers(layer_names, layers, reference_grid_pu_nan, wd=None, fig_s=None,
+                    cmap="RdYlBu_r", dpi=250, verbose=False):
     for i in range(len(layer_names)):
         if wd is not None:
+            try:
+                os.makedirs(wd)
+            except FileExistsError:
+                pass
             plot_map(layers[i], z=reference_grid_pu_nan, nan_to_zero=False, fig_s=fig_s,
-                         cmap="RdYlBu_r", show=False, title=layer_names[i], vmin=0,
-                         outfile=os.path.join(wd, layer_names[i] +".png"), dpi=250)
+                         cmap=cmap, show=False, title=layer_names[i], vmin=0,
+                         outfile=os.path.join(wd, layer_names[i] +".png"), dpi=dpi)
+            if verbose:
+                print("results saved in:", wd)
         else:
             plot_map(layers[i], z=reference_grid_pu_nan, nan_to_zero=False, fig_s=fig_s,
-                         cmap="RdYlBu_r", show=True, title=layer_names[i], vmin=0,
-                         outfile=None, dpi=250)
+                         cmap=cmap, show=True, title=layer_names[i], vmin=0,
+                         outfile=None, dpi=dpi)
 
 
 

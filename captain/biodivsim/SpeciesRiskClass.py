@@ -849,12 +849,12 @@ class ExtinctioRiskProtectedRangeFuture(ExtinctionRisk):
 
 
 class NoExtinctioRisk(ExtinctionRisk):
-    def __init__(self, natural_state: SimGrid):
+    def __init__(self, natural_state: SimGrid, risk_weights=None):
         self.x = 0
-        super().__init__(natural_state)
+        super().__init__(natural_state, risk_weights=risk_weights)
 
     def classify_species(self, state: SimGrid):
-        return np.ones(state.numberOfSpecies())
+        return self.starting_rl_status
 
 
 

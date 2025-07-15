@@ -29,6 +29,7 @@ class PolicyNN(object):
                  quadrant_coords_list=None,
                  wd_plot=None,
                  protection_constraint=None,
+                 greedy_search=None,
                  ):
         # check meta features matches the features generating function
         self._num_meta_features = num_meta_features
@@ -53,6 +54,9 @@ class PolicyNN(object):
         self._use_true_natural_state = use_true_natural_state
         self._lastObs = None
         self._protection_constraint = protection_constraint
+        self._greedy_search = greedy_search
+        if greedy_search is not None:
+            self._greedy_search[1] = np.array(self._greedy_search[1])
 
     @property
     def num_output(self):
@@ -336,6 +340,7 @@ class PolicyRestoreUpdateFreq(PolicyNN):
 
         # params
         if self._lastObs is None:
+            # print("rich_state.grid_obj_most_recent", rich_state.grid_obj_most_recent)
             if self._verbose:
                 print("\nExtracting features...")
             lastObs = state_monitor.extract_features_restore(
@@ -355,7 +360,7 @@ class PolicyRestoreUpdateFreq(PolicyNN):
                 sp_threshold=self._sp_threshold,
                 flattened=self._flattened,
                 min_pop_requirement=rich_state.min_pop_requirement,
-                future_species_threat_label=rich_state.species_future_threat_label
+                future_species_threat_label=rich_state.species_future_threat_label,
             )
             self.reset_lastObs(lastObs)
             # print("reset_lastObs", self._lastObs)
@@ -377,58 +382,91 @@ class PolicyRestoreUpdateFreq(PolicyNN):
                           )
             # print(hgfd)
 
-        coeff_policy = self._coeff + 0
-        internal_state = state[:, :]
+        if self._greedy_search is not None:
+            # print("greedy_search\n", state.shape, self._greedy_search, self._feature_set, self._lastObs.feature_names)
+            # list: [0] <- names of features
+            # list: [1] <- >0 to maximize, <0 to minimize (value = weight)
+            cr_ind = np.array([np.where(self._lastObs.feature_names == i)[0][0] for i in self._greedy_search[0]])
+            # print("ind", cr_ind, np.mean(state[:, cr_ind]), state[:, cr_ind], self._greedy_search)
+            val_r = (1e-50 + state[:, cr_ind])
+            # val_r_e = (val / np.maximum(np.mean(val, axis=0), 1e-50)) * self._greedy_search[1]
 
-        if self._nodes_l1 == 1:
-            if self._nodes_l2 != -1:
-                # linear regression
-                h2 = np.einsum("nf, f -> n", internal_state, coeff_policy)
-            else:
-                h2 = np.zeros(internal_state.shape[0])
-                h2[np.argmax(internal_state[:,0])] = 1
-                if self._verbose:
-                    print(internal_state[0, 0], np.argmax(internal_state[:,0]))
-                    print(np.where(internal_state[:,0] == 0))
-                    print(internal_state[:,0] )
-                    print(h2)
+            # use ratio in log space
+
+            # val_r = val #/ np.maximum(np.mean(val, axis=0), 1e-50)
+            log_num = np.log(val_r[:, self._greedy_search[1] > 0]) * self._greedy_search[1][self._greedy_search[1] > 0]
+            log_den = np.log(val_r[:, self._greedy_search[1] < 0]) * np.abs(self._greedy_search[1])[self._greedy_search[1] < 0]
+            # print("\nlog_den", log_den.shape)
+            # print("log_num", log_num.shape)
+            log_num = np.sum(log_num, axis=1)
+            log_den = np.sum(log_den, axis=1)
+            val_r_e = log_num - log_den
+            # print("\nlog_den", log_den.shape)
+            # print("log_num", log_num.shape, log_num[0], log_num[1000], log_num[2000])
+            # print("val_r_e", val_r_e[0], val_r_e[1000], val_r_e[2000])
+            # print(self._greedy_search[1])
+
+            # set lowest values to protected cells
+            val_r_e[rich_state.protection_matrix.flatten() == 1] = np.min(val_r_e)
+            # probs = scipy.special.softmax(np.sum(val_r_e, axis=1))
+
+            probs = scipy.special.softmax(val_r_e)
 
         else:
-            if self._nodes_l2:  # only used if using additional hidden layer
+            # run NN
+            coeff_policy = self._coeff + 0
+            internal_state = state[:, :]
+
+            if self._nodes_l1 == 1:
+                if self._nodes_l2 != -1:
+                    # linear regression
+                    h2 = np.einsum("nf, f -> n", internal_state, coeff_policy)
+                else:
+                    h2 = np.zeros(internal_state.shape[0])
+                    h2[np.argmax(internal_state[:,0])] = 1
+                    if self._verbose:
+                        print(internal_state[0, 0], np.argmax(internal_state[:,0]))
+                        print(np.where(internal_state[:,0] == 0))
+                        print(internal_state[:,0] )
+                        print(h2)
+
+            else:
+                if self._nodes_l2:  # only used if using additional hidden layer
+                        tmp = coeff_policy[: self._num_features * self._nodes_l1]
+                        weights_l1 = tmp + 0
+                        tmp_coeff = weights_l1.reshape(self._num_features, self._nodes_l1)
+
+                        weights_l2 = coeff_policy[len(tmp) : -self._nodes_l3]
+                        if DEBUG:
+                            print(tmp_coeff.shape, weights_l2.shape)
+                        tmp_coeff2 = weights_l2.reshape(self._nodes_l1, self._nodes_l2)
+
+                        weights_l3 = coeff_policy[-self._nodes_l3 :]
+                else:
                     tmp = coeff_policy[: self._num_features * self._nodes_l1]
                     weights_l1 = tmp + 0
                     tmp_coeff = weights_l1.reshape(self._num_features, self._nodes_l1)
 
-                    weights_l2 = coeff_policy[len(tmp) : -self._nodes_l3]
-                    if DEBUG:
-                        print(tmp_coeff.shape, weights_l2.shape)
-                    tmp_coeff2 = weights_l2.reshape(self._nodes_l1, self._nodes_l2)
+                    weights_l3 = coeff_policy[-(self._nodes_l3) :]
 
-                    weights_l3 = coeff_policy[-self._nodes_l3 :]
-            else:
-                tmp = coeff_policy[: self._num_features * self._nodes_l1]
-                weights_l1 = tmp + 0
-                tmp_coeff = weights_l1.reshape(self._num_features, self._nodes_l1)
+                z1 = np.einsum("nf, fi->ni", internal_state, tmp_coeff)
+                # z1[z1 < 0] = 0
+                z1 = np.tanh(z1)
+                if self._nodes_l2:
+                    # print(tmp_coeff2.shape, z1.shape)
+                    h1 = np.einsum("ni,ic->nc", z1, tmp_coeff2)
+                    # h1[h1 < 0] = 0
+                    # z1 = h1 + 0
+                    z1 = np.tanh(h1)
+                h2 = np.einsum("f,nf->n", weights_l3, z1)
 
-                weights_l3 = coeff_policy[-(self._nodes_l3) :]
+            if self._temperature != 1:
+                h2 *= self._temperature
 
-            z1 = np.einsum("nf, fi->ni", internal_state, tmp_coeff)
-            # z1[z1 < 0] = 0
-            z1 = np.tanh(z1)
-            if self._nodes_l2:
-                # print(tmp_coeff2.shape, z1.shape)
-                h1 = np.einsum("ni,ic->nc", z1, tmp_coeff2)
-                # h1[h1 < 0] = 0
-                # z1 = h1 + 0
-                z1 = np.tanh(h1)
-            h2 = np.einsum("f,nf->n", weights_l3, z1)
+            # set to min prob probs of already protected units
+            h2[self._lastObs.protected_quadrants == 1] = np.min(h2)
+            probs = scipy.special.softmax(h2)
 
-        if self._temperature != 1:
-            h2 *= self._temperature
-
-        # set to min prob probs of already protected units
-        h2[self._lastObs.protected_quadrants == 1] = np.min(h2)
-        probs = scipy.special.softmax(h2)
         # set to 0 probs of already protected units
         probs[self._lastObs.protected_quadrants == 1] = 0
         if np.sum(probs) < 1e-20:

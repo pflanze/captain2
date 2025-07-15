@@ -53,7 +53,7 @@ class ActionVec(object):
 
 
 class smallGrid(object):
-    def __init__(self, biodivgrid, include_future_h=False):
+    def __init__(self, biodivgrid, include_future_h=False, env_layers=None):
         self._length = biodivgrid._length
         self._n_species = biodivgrid._n_species
         self._species_id = biodivgrid._species_id
@@ -110,6 +110,8 @@ class smallGrid(object):
         self.future_h = biodivgrid.future_h
         self._reference_grid_pu = biodivgrid._reference_grid_pu
         self._rm_lingering_pops = biodivgrid._rm_lingering_pops
+        self._n_pus = biodivgrid._n_pus
+        self._env_layers = env_layers
 
     @property
     def length(self):
@@ -228,7 +230,12 @@ class BiodivEnvUtils(object):
     @staticmethod
     def getRichProtectAction(action, grid_size, resolution):
         cellList = BiodivEnvUtils.getQuadrandCoord(grid_size, resolution)
-        # print(grid_size, resolution, len(cellList), action)
+        try:
+            _ = cellList[action]
+        except:
+            print("\nFailed to get cell list")
+            print("\ngrid_size", grid_size, resolution)
+            print("\ncellList", len(cellList), action)
         return Action(ActionType.Protect, cellList[action], action)
 
 
@@ -427,6 +434,9 @@ class BioDivEnv(gym.Env):
         self._K_species = K_species
         self._reward_min_protection = reward_min_protection
         self.feature_set = feature_set
+        self.conv_block = None
+        self._env_layers = None
+        self.previous_protection_matrix = None
         self.reset()
 
     def _initEnv(self):
@@ -589,7 +599,7 @@ class BioDivEnv(gym.Env):
 
         if self.use_small_grid:
             self.grid_obj_previous = smallGrid(self.bioDivGrid)
-            self.grid_obj_most_recent = smallGrid(self.bioDivGrid)
+            self.grid_obj_most_recent = smallGrid(self.bioDivGrid, env_layers=self._env_layers)
         else:
             self.grid_obj_previous = copy.deepcopy(self.bioDivGrid)
             self.grid_obj_most_recent = copy.deepcopy(self.bioDivGrid)
@@ -619,7 +629,7 @@ class BioDivEnv(gym.Env):
             # [[1, 1, 1, 1, 1] + list(self.risk_label_counts(normalize=True)) + self.get_metrics()]
 
         self.current_protected_range_fraction = np.sum(
-            self.bioDivGrid.protectedRangePerSpecies() / self.bioDivGrid.geoRangePerSpecies())
+            self.bioDivGrid.protectedRangePerSpecies() / (1E-50 + self.bioDivGrid.geoRangePerSpecies()))
 
 
 
@@ -704,8 +714,8 @@ class BioDivEnv(gym.Env):
         if self.use_small_grid:
             # ALTERNATIVE COPY
             if self.update_previous_observation:
-                self.grid_obj_previous = smallGrid(self.grid_obj_most_recent)
-            self.grid_obj_most_recent = smallGrid(self.bioDivGrid)
+                self.grid_obj_previous = smallGrid(self.grid_obj_most_recent, env_layers=self._env_layers)
+            self.grid_obj_most_recent = smallGrid(self.bioDivGrid, env_layers=self._env_layers)
         else:
             if self.update_previous_observation:
                 self.grid_obj_previous = copy.deepcopy(self.grid_obj_most_recent)
@@ -785,6 +795,12 @@ class BioDivEnv(gym.Env):
     def set_max_n_protected_cells(self, r):
         self._max_n_protected_cells = r
 
+    def set_env_layers(self, s, reset_previous_grid=False):
+        self._env_layers = s
+        if reset_previous_grid:
+            self.grid_obj_previous._env_layers = s
+            self.grid_obj_most_recent._env_layers = s
+
     # def getCarbonValue_cell(self):
     #     return np.einsum('sxy,s -> xy', self.bioDivGrid.h, self.species_carbon_value)
     #
@@ -806,6 +822,26 @@ class BioDivEnv(gym.Env):
             return self.species_risk_criteria.predict_future_species(self.bioDivGrid)
         else:
             return self.species_risk_criteria.predict_future_species(grid)
+
+    def calc_connectivity_reward(self, verbose=False):
+        sm = np.sum(self.bioDivGrid.protection_matrix)
+        if sm > 0:
+            if self.conv_block is None:
+                self.conv_block = np.ones((3,3))
+
+            tmp = self.bioDivGrid.protection_matrix.flatten(
+            )[:-(self.bioDivGrid.protection_matrix.size - self.bioDivGrid._n_pus)] + 0
+            m_grid = np.zeros(self.bioDivGrid._reference_grid_pu.shape)
+            m_grid[self.bioDivGrid._reference_grid_pu > 0] += tmp
+
+            c = ndimage.convolve(m_grid, self.conv_block, mode='constant', origin=0)
+            if verbose:
+                print(c)
+            c[c == 1] = 0
+            # the reward is relative to the number of protected cells
+            return np.sum(c) / sm
+        else:
+            return 0
 
     def step(self, action: Action = None,
              skip_env_step: bool = False, skip_dispersal=False, update_suitability=False):
@@ -864,7 +900,7 @@ class BioDivEnv(gym.Env):
             # print(self.protected_quadrants)
             # print("action.value_quadrant", action.value_quadrant, "added_protection_cost", added_protection_cost)
             cost = np.sum(self._baseline_cost_quadrant[np.array(action.value_quadrant)]) + np.sum(added_protection_cost)
-            # print(cost, self.budget)
+            # print("\ncost, self.budget", cost, self.budget)
             if self.budget >= cost:
                 if self._canProtect():
                     # do not observe the state, keep knowledge as last step, update protection matrix
@@ -1128,10 +1164,15 @@ class BioDivEnv(gym.Env):
 
             if 'population' in self._reward_weights.keys():
 
-                tot_reward = self.bioDivGrid.protectedIndPerSpecies() / self.bioDivGrid.individualsPerSpecies()
+                tot_reward = self.bioDivGrid.protectedIndPerSpecies() / np.maximum(1, self.bioDivGrid.individualsPerSpecies())
                 pop_scaler = 0.5 # values < 1 give more importance to first portion of protected population
                 # e.g. np.linspace(0, 1, 11) ** 0.5
-                tot_reward = np.mean(tot_reward ** pop_scaler) * 100
+                # tot_reward = np.mean(tot_reward ** pop_scaler) * 100
+                w = self.species_risk_criteria.risk_weights / np.sum(self.species_risk_criteria.risk_weights)
+                # print(w)
+                # print(tot_reward ** pop_scaler)
+                tot_reward = np.average(tot_reward ** pop_scaler, weights=w[self.getExtinction_risk_labels()]) * 100
+
                 reward_c = (tot_reward * self._reward_weights['population'] - self._cumrewards['population'])
                 self._step_rewards['population'] = float(reward_c)
 
@@ -1141,7 +1182,7 @@ class BioDivEnv(gym.Env):
                 rl = self.getExtinction_risk_labels()
                 protected_pop_per_species = self.bioDivGrid.protectedIndPerSpecies()
                 pop_size = self.bioDivGrid.individualsPerSpecies()
-                pr_fr = np.zeros(self.n_species)
+                pr_fr = np.zeros(self.bioDivGrid.n_species)
                 pr_fr[pop_size > 0] = 1 - (protected_pop_per_species[pop_size > 0] / pop_size[pop_size > 0])
                 avg_protection_rl_class = np.ones(self.species_risk_criteria.n_labels)
                 for i in range(self.species_risk_criteria.n_labels):
@@ -1152,11 +1193,57 @@ class BioDivEnv(gym.Env):
                 reward_sp = (tot_reward_species * self._reward_weights['species_risk'] - self._cumrewards['species_risk'])
                 self._step_rewards['species_risk'] = float(reward_sp)
 
-            if 'genetic_distance' in self._reward_weights.keys():
+            if 'env_distance' in self._reward_weights.keys():
                 if self._env_layers is None:
-                    pass
+                    sys.exit("_env_layers not provided.\n")
+
                 else:
-                    print("work in progress")
+                    if self.previous_protection_matrix is None:
+                        self.previous_protection_matrix = np.zeros(self.bioDivGrid.protection_matrix.shape)
+
+                    sp_rewards = np.zeros(self.bioDivGrid._n_species)
+                    for species_i in range(self.bioDivGrid._n_species):
+                        env_sp_protect = self._env_layers[:,
+                                         (self.bioDivGrid.protection_matrix * self.bioDivGrid.h[species_i]) > 0].reshape(
+                            (self._env_layers.shape[0], np.sum((self.bioDivGrid.protection_matrix * self.bioDivGrid.h[species_i]) > 0)))
+
+                        delta_protection_m = self.bioDivGrid.protection_matrix - self.previous_protection_matrix
+                        # shape = (env_layers, added_protected_cells x occurrence of species_i)
+                        env_sp_new_protect = self._env_layers[:, (delta_protection_m * self.bioDivGrid.h[species_i]) > 0].reshape(
+                            (self._env_layers.shape[0], np.sum((delta_protection_m * self.bioDivGrid.h[species_i]) > 0)))
+
+                        # env difference: shape (n_env_layers, n_protected_cells, n_added_protected_cells)
+                        env_diff = env_sp_new_protect[:, np.newaxis, :] - env_sp_protect[:, :, np.newaxis]
+
+                        reward = 0
+                        if np.sum(self.bioDivGrid.protection_matrix) > 0:
+                            env_diff_init = env_sp_new_protect[:, np.newaxis, :] - env_sp_new_protect[:, :, np.newaxis]
+                            # if no cells are already protected
+                            eucl_diff = np.sqrt(np.sum(env_diff_init ** 2, axis=0))
+                            eucl_diff[np.diag_indices(eucl_diff.shape[0])] = np.nan
+                            if eucl_diff.size > 1:
+                                reward = np.mean(np.nanmin(eucl_diff, 1))
+                            # print("Reward 1: ", reward)
+
+                        if np.sum(env_diff) > 0:
+                            # shape (n_protected_cells, n_added_protected_cells)
+                            eucl_diff = np.sqrt(np.sum(env_diff ** 2, axis=0))
+                            # minimum distance to a protected area calculated for each additional area
+                            min_diff = np.min(eucl_diff, axis=0)
+                            # print("Reward 2: ", np.mean(min_diff))
+                            reward += np.mean(min_diff)
+
+                        sp_rewards[species_i] = reward
+
+                    self._step_rewards['env_distance'] = float(np.sum(sp_rewards))
+                    self.previous_protection_matrix = self.bioDivGrid.protection_matrix + 0
+
+            if 'connectivity' in self._reward_weights.keys():
+                tot_reward = self.calc_connectivity_reward()
+                reward_c = (tot_reward * self._reward_weights['connectivity'] - self._cumrewards['connectivity'])
+                self._step_rewards['connectivity'] = float(reward_c)
+
+
 
             #---
             # rew = np.sum(self.risk_label_counts(normalize=False) * np.array([0, 0.5, 0.707, 0.866, 1]))
@@ -1171,6 +1258,7 @@ class BioDivEnv(gym.Env):
             if 'cost' in self._reward_weights.keys():
                 tot_reward_cost = self.budget / self._initialBudget * 100
                 reward_cost = (tot_reward_cost * self._reward_weights['cost'] - self._cumrewards['cost'])
+                # print("tot_reward_cost", tot_reward_cost)
                 self._step_rewards['cost'] = float(reward_cost)
 
             reward = sum(self._step_rewards.values())

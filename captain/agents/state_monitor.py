@@ -726,7 +726,7 @@ def get_rl_features_cell(h, pm, rl, sp_threshold, dm, min_protected_cells=10,
 
         else:
             protected_pop_per_species = np.einsum("sij, ij -> s", h, pm)
-            protected_fraction_species = protected_pop_per_species / np.einsum("sij -> s", h)
+            protected_fraction_species = protected_pop_per_species / np.maximum(1, np.einsum("sij -> s", h))
             protected_species_id = (protected_fraction_species > 0).astype(int)
 
             h_rl_not_protected = [np.einsum('sxy, s -> xy',
@@ -906,6 +906,11 @@ def get_feature_restore_indx(mode="carbon", print_obs_mode=False):
         indx = np.arange(21)
     elif mode == "pareto_mlt":
         indx = np.arange(16)
+    elif mode == "env_distance":
+        indx = np.arange(8)
+    elif mode == "connectivity":
+        indx = np.arange(4)
+
     else:
         sys.exit("Mode not found: %s" % mode)
 
@@ -1161,8 +1166,56 @@ def extract_features_restore(grid_obj,
                                cost_quadrant.reshape((feat_list.shape[0], 1))
                                ))
 
+    elif feature_set == "connectivity":
+        feat_list, protected_species_id = get_rl_features_convolution(
+            h=grid_obj_previous.h,  # based on potential diversity
+            future_h=grid_obj.future_h,
+            reference_grid_pu=grid_obj._reference_grid_pu,
+            pm=grid_obj.protection_matrix,
+            rl=species_threat_label,
+            sp_threshold=sp_threshold,
+            dm=grid_obj.disturbance_matrix,
+            min_protected_cells=min_protected_cells,
+            include_future_features=False,
+            geo_range=feature_set == "sp_risk_protect_pop_future")
+
+        feat_names = np.array(["Disturbance", # 0
+                               # "CR", # 1
+                               # "EN", # 2
+                               # "VU", # 3
+                               # "NT", # 4
+                               # "CR_not_protected", # 5
+                               # "EN_not_protected", # 6
+                               # "VU_not_protected", # 7
+                               # "NT_not_protected", # 8
+                               # "LC_not_protected", # 9
+                               "Disturbance_conv", # 10
+                               # "CR_conv", # 11
+                               # "EN_conv", # 12
+                               # "potential_carbon", # 13
+                               # "potential_carbon_conv", # 14
+                               "cost" # 15
+                               ])
+        s = grid_obj.protection_matrix.flatten().shape[0]
+        connectivity_feat = feature_convolution(feat_1d=grid_obj.protection_matrix.flatten(),
+                                                reference_grid_pu=grid_obj._reference_grid_pu,
+                                                n_pus = grid_obj._n_pus,
+                                                conv_size=3, feat_shape_0=s,
+                                                plot="").squeeze()
+
+        feat_list = feat_list[:, np.array([0, 10])]
+
+        feat_list = np.hstack((feat_list,
+                               cost_quadrant.reshape((feat_list.shape[0], 1)),
+                               connectivity_feat.flatten().reshape((feat_list.shape[0], 1))
+                               )
+                              ).squeeze()
+        feat_names = np.append(feat_names, "connectivity")
+        protection_vec = current_protection_matrix.flatten()
+
 
     elif feature_set == "pareto_mlt":
+        # print("CALLING pareto_mlt")
         feat_list, protected_species_id = get_rl_features_convolution(
             h=grid_obj_previous.h,  # based on potential diversity
             future_h=grid_obj.future_h,
@@ -1213,6 +1266,74 @@ def extract_features_restore(grid_obj,
                                cost_quadrant.reshape((feat_list.shape[0], 1))
                                ))
 
+    elif feature_set == "env_distance":
+        feat_list, protected_species_id = get_rl_features_convolution(
+            h=grid_obj_previous.h,  # based on potential diversity
+            future_h=grid_obj.future_h,
+            reference_grid_pu=grid_obj._reference_grid_pu,
+            pm=grid_obj.protection_matrix,
+            rl=species_threat_label,
+            sp_threshold=sp_threshold,
+            dm=grid_obj.disturbance_matrix,
+            min_protected_cells=min_protected_cells,
+            include_future_features=False,
+            geo_range=feature_set == "sp_risk_protect_pop_future")
+
+        feat_names = np.array(["Disturbance", # 0
+                               # "CR", # 1
+                               # "EN", # 2
+                               # "VU", # 3
+                               # "NT", # 4
+                               "CR_not_protected", # 5
+                               "EN_not_protected", # 6
+                               "VU_not_protected", # 7
+                               "NT_not_protected", # 8
+                               "LC_not_protected", # 9
+                               # "Disturbance_conv", # 10
+                               # "CR_conv", # 11
+                               # "EN_conv", # 12
+                               # "potential_carbon", # 13
+                               # "potential_carbon_conv", # 14
+                               "cost" # 15
+                               ])
+
+        # calc features env distance
+        # print("grid_obj", grid_obj)
+        env_sp_protect = grid_obj._env_layers[:, grid_obj.protection_matrix > 0].reshape(
+            (grid_obj._env_layers.shape[0], np.sum(grid_obj.protection_matrix > 0)))
+
+        env_sp_non_protect = grid_obj._env_layers[:, grid_obj.protection_matrix == 0].reshape(
+            (grid_obj._env_layers.shape[0], np.sum(grid_obj.protection_matrix == 0)))
+
+        # env difference: shape (n_env_layers, n_protected_cells, n_non_protected_cells)
+
+        feat_list = feat_list[:, np.array([0, 5, 6, 7, 8, 9])]
+
+        if env_sp_protect.shape[1] > 0:
+            env_diff = env_sp_non_protect[:, np.newaxis, :] - env_sp_protect[:, :, np.newaxis]
+            eucl_diff = np.sqrt(np.sum(env_diff ** 2, axis=0))
+            # minimum distance to a protected area
+            min_diff = np.min(eucl_diff, axis=0)
+            # reshape to grid shape
+            env_distance_feature = np.zeros(grid_obj.protection_matrix.shape)
+            env_distance_feature[grid_obj.protection_matrix == 0] = min_diff + 0
+            # print("\n\nenv_diff", env_distance_feature.shape, env_sp_non_protect.shape, env_sp_protect.shape)
+        else:
+            env_distance_feature = np.zeros(grid_obj.protection_matrix.shape)
+            # print("\n\nenv_diff_0", env_distance_feature.shape, env_sp_non_protect.shape, env_sp_protect.shape)
+        #
+        # shape (n_protected_cells, n_non_protected_cells)
+        # print("feat_list.shape", feat_list.shape, env_distance_feature.shape)
+        feat_list = np.hstack((feat_list,
+                               cost_quadrant.reshape((feat_list.shape[0], 1)),
+                               env_distance_feature.flatten().reshape((feat_list.shape[0], 1))
+                               )
+                              ).squeeze()
+        feat_names = np.append(feat_names, "env_distance")
+
+        # print(feat_list.shape, env_distance_feature.shape)
+
+        protection_vec = current_protection_matrix.flatten()
     else:
 
         sp_ind_quadrant = get_sp_indx_per_quadrant(grid_obj.h, quandrant_grid_indx)
@@ -1320,7 +1441,8 @@ def extract_features_restore(grid_obj,
 
     if feature_set not in  ["sp_risk_protect", "sp_risk_protect_pop",
                             "sp_risk_protect_future", "sp_risk_protect_pop_future",
-                            "future_carbon", "sp_risk_conv", "pareto_mlt", "pareto_mlt_future"]:
+                            "future_carbon", "sp_risk_conv", "pareto_mlt", "pareto_mlt_future",
+                            "env_distance", "connectivity"]:
         all_features_by_quadrant = feat_list[:, get_feature_restore_indx(feature_set)]
         all_feat_names = feat_names[get_feature_restore_indx(feature_set)]
 
@@ -1457,4 +1579,246 @@ def alter_init_grid(grid_obj,
     p_unobserved = (1 / (1 + h_tmp)) ** bias_steepness  # (species, cell, cell)
     rr = np.random.random(h_tmp.shape)
     h_tmp[rr < p_unobserved] = 0
+
+
+
+
+####
+# TODO: add this optopn to replace state_monitor.extract_features_restore() in policy class
+def extract_features_sets(grid_obj,
+                          grid_obj_previous,
+                          quadrant_resolution, # env.resolution
+                          current_protection_matrix, # 0: non protected, 1: protected or unaffordable!
+                          species_threat_label, # env.getExtinction_risk_labels()
+                          n_threat_labels=5, # env.species_risk_criteria.n_labels
+                          cost_quadrant=None, # env.getProtectCostQuadrant()
+                          quandrant_grid_indx=None, # env._quandrant_grid_indx
+                          sp_threshold=1,
+                          mode=0, # currently not used could change features depending on reward
+                          feature_set = None,
+                          use_true_natural_state=True, # if False approximates natural diversity and carbon
+                          observe_error=0,
+                          budget=0,
+                          min_pop_requirement=None,
+                          flattened=False,
+                          verbose=0,
+                          normalize=True,
+                          get_protected_species_list=False,
+                          min_protected_cells=10, # TODO: expose
+                          future_species_threat_label=None
+                          ):
+    if quandrant_grid_indx is None:
+        quandrant_grid_indx = get_quadrant_indx_grid(grid_obj.length, quadrant_resolution)
+    feat_list = None
+    feat_names = None
+    if "pareto_mlt_future" in feature_set:
+        if future_species_threat_label is None:
+            feat_list, protected_species_id = get_rl_features_convolution(
+                h=grid_obj_previous.h,  # based on potential diversity
+                future_h=grid_obj.future_h,
+                reference_grid_pu=grid_obj._reference_grid_pu,
+                pm=grid_obj.protection_matrix,
+                rl=species_threat_label,
+                sp_threshold=sp_threshold,
+                dm=grid_obj.disturbance_matrix,
+                min_protected_cells=min_protected_cells,
+                geo_range=feature_set == "sp_risk_protect_pop_future")
+        else:
+            feat_list, protected_species_id = get_rl_features_convolution(
+                h=grid_obj_previous.h,  # based on potential diversity
+                future_h=grid_obj.future_h,
+                reference_grid_pu=grid_obj._reference_grid_pu,
+                pm=grid_obj.protection_matrix,
+                rl=future_species_threat_label,
+                sp_threshold=sp_threshold,
+                dm=grid_obj.disturbance_matrix,
+                min_protected_cells=min_protected_cells,
+                geo_range=feature_set == "sp_risk_protect_pop_future")
+
+        feat_names = np.array(["Disturbance", # 0
+                               "CR", # 1
+                               "EN", # 2
+                               "VU", # 3
+                               "NT", # 4
+                               "CR_not_protected",
+                               "EN_not_protected",
+                               "VU_not_protected",
+                               "NT_not_protected",
+                               "LC_not_protected",
+                               "CR_future",
+                               "EN_future",
+                               "VU_future",
+                               "NT_future",
+                               "Disturbance_conv",
+                               "CR_conv",
+                               "EN_conv",
+                               "potential_carbon",
+                               "future_carbon",
+                               "potential_carbon_conv",
+                               "cost"
+                               ])
+
+        #
+        # feat_names = np.array(["Disturbance",
+        #                        "potential_carbon",
+        #                        "future_carbon",
+        #                        "Disturbance_conv"
+        #                        "potential_carbon_conv"])
+
+        # h, natural_h, future_h, sp_carbon,
+        # reference_grid_pu, dm, pm, sp_threshold, conv_size = 5
+
+        feat_list_carb, _ = get_rl_features_cell_future_carbon(
+            h=grid_obj.h,
+            natural_h=grid_obj_previous.h,
+            future_h=grid_obj.future_h,
+            sp_carbon=grid_obj.species_carbon_value,
+            dm=grid_obj.disturbance_matrix,
+            pm=grid_obj.protection_matrix,
+            sp_threshold=sp_threshold,
+            reference_grid_pu=grid_obj._reference_grid_pu)
+
+
+
+
+        protection_vec = current_protection_matrix.flatten()
+
+        feat_list = np.hstack((feat_list,
+                               feat_list_carb[:, np.array([1,2,4])],
+                               cost_quadrant.reshape((feat_list.shape[0], 1))
+                               ))
+
+    elif "pareto_mlt" in feature_set:
+        feat_list, protected_species_id = get_rl_features_convolution(
+            h=grid_obj_previous.h,  # based on potential diversity
+            future_h=grid_obj.future_h,
+            reference_grid_pu=grid_obj._reference_grid_pu,
+            pm=grid_obj.protection_matrix,
+            rl=species_threat_label,
+            sp_threshold=sp_threshold,
+            dm=grid_obj.disturbance_matrix,
+            min_protected_cells=min_protected_cells,
+            include_future_features=False,
+            geo_range=feature_set == "sp_risk_protect_pop_future")
+
+        feat_names = np.array(["Disturbance", # 0
+                               "CR", # 1
+                               "EN", # 2
+                               "VU", # 3
+                               "NT", # 4
+                               "CR_not_protected", # 5
+                               "EN_not_protected", # 6
+                               "VU_not_protected", # 7
+                               "NT_not_protected", # 8
+                               "LC_not_protected", # 9
+                               "Disturbance_conv", # 10
+                               "CR_conv", # 11
+                               "EN_conv", # 12
+                               "potential_carbon", # 13
+                               "potential_carbon_conv", # 14
+                               "cost" # 15
+                               ])
+
+        # h, natural_h, future_h, sp_carbon,
+        # reference_grid_pu, dm, pm, sp_threshold, conv_size = 5
+        feat_list_carb, _ = get_rl_features_cell_carbon(
+            h=grid_obj.h,
+            natural_h=grid_obj_previous.h,
+            sp_carbon=grid_obj.species_carbon_value,
+            dm=grid_obj.disturbance_matrix,
+            pm=grid_obj.protection_matrix,
+            sp_threshold=sp_threshold,
+            reference_grid_pu=grid_obj._reference_grid_pu)
+
+
+
+
+        protection_vec = current_protection_matrix.flatten()
+        feat_list = np.hstack((feat_list,
+                               feat_list_carb,
+                               cost_quadrant.reshape((feat_list.shape[0], 1))
+                               ))
+
+    if "connectivity" in feature_set:
+        feat = feature_convolution(feat_1d=grid_obj.protection_matrix.flatten(),
+                                   reference_grid_pu=grid_obj._reference_grid_pu,
+                                   n_pus = grid_obj._n_pus,
+                                   conv_size=3, feat_shape_0=grid_obj.protection_matrix,
+                                   plot="").squeeze()
+        feat_list = np.hstack((feat_list, feat))
+        feat_names = np.append(feat_names, "connectivity")
+
+    if "env_distance" in feature_set:
+        # should work on sparse graph too as distances are computed over env space
+        # if graph_protection_matrix then graph_env_layer3d is expected
+        env_sp_protect = grid_obj._env_layers[:, grid_obj.protection_matrix > 0].reshape(
+            (grid_obj._env_layers.shape[0], np.sum(grid_obj.protection_matrix > 0)))
+
+        env_sp_non_protect = grid_obj._env_layers[:, grid_obj.protection_matrix == 0].reshape(
+            (grid_obj._env_layers.shape[0], np.sum(grid_obj.protection_matrix == 0)))
+
+        # env difference: shape (n_env_layers, n_protected_cells, n_non_protected_cells)
+        env_diff = env_sp_non_protect[:, np.newaxis, :] - env_sp_protect[:, :, np.newaxis]
+        # shape (n_protected_cells, n_non_protected_cells)
+        eucl_diff = np.sqrt(np.sum(env_diff ** 2, axis=0))
+        # minimum distance to a protected area
+        min_diff = np.min(eucl_diff, axis=0)
+        # reshape to grid shape
+        env_distance_feature = np.zeros(grid_obj.protection_matrix.shape)
+        env_distance_feature[grid_obj.protection_matrix == 0] = min_diff + 0
+        feat_list = np.hstack((feat_list, env_distance_feature.flatten()))
+        feat_names = np.append(feat_names, "env_distance")
+
+    if normalize:
+        # set all features of protected areas to minimum (i.e. 0 after rescaling):
+        feat_list[protection_vec == 1, :] = np.min(feat_list, 0)
+
+        # normalize range 0-1
+        feat_list = feat_list - np.mean(feat_list,0)
+        den = np.max(feat_list,0) - np.min(feat_list,0)
+
+        den[den < 0.0001] = 1
+        feat_list = feat_list / den
+        feat_list += np.abs(np.min(feat_list,0))
+
+        # feature_convolution(feat_list[:,1],
+        #                     reference_grid_pu=grid_obj._reference_grid_pu,
+        #                     n_pus=grid_obj._reference_grid_pu[grid_obj._reference_grid_pu > 0].size,
+        #                     conv_size=5,
+        #                     feat_shape_0=feat_list[:,2].shape[0],
+        #                     plot="potential_carbon")
+
+        # print(hgfd)
+
+
+    if feature_set not in  ["sp_risk_protect", "sp_risk_protect_pop",
+                            "sp_risk_protect_future", "sp_risk_protect_pop_future",
+                            "future_carbon", "sp_risk_conv", "pareto_mlt", "pareto_mlt_future"]:
+        all_features_by_quadrant = feat_list[:, get_feature_restore_indx(feature_set)]
+        all_feat_names = feat_names[get_feature_restore_indx(feature_set)]
+
+        protected_species_list = []
+        if get_protected_species_list:
+            for i in range(len(sp_ind_quadrant)):
+                if protection_vec[i] == 1:
+                    protected_species_list = protected_species_list + list(sp_ind_quadrant[i])
+            protected_species_list = np.unique(np.array(protected_species_list))
+    else:
+        # print("all_features_by_quadrant", all_features_by_quadrant.shape)
+        all_features_by_quadrant = feat_list
+        all_feat_names = feat_names
+        protected_species_list = protected_species_id
+        sp_ind_quadrant = None
+
+
+    features = FeaturesObservation(
+        quadrant_coords_list=[],
+        sp_quadrant_list=sp_ind_quadrant,
+        protected_species_list=protected_species_list,
+        stats_quadrant=all_features_by_quadrant,
+        min_pop_requirement=min_pop_requirement,
+        feature_names=all_feat_names,
+        protected_quadrants=protection_vec
+    )
+    return features
 
