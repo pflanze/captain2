@@ -20,6 +20,7 @@ import collections
 from .env_setup import *
 from ..biodivsim.BioDivEnv import *
 import multiprocessing
+from ..utilities.empirical_data_parser import plot_map_class
 
 DEBUG = 0
 
@@ -1104,11 +1105,15 @@ def runBatchGeneticStrategyEmpirical(envList,
             l_no_nan = [np.nan_to_num(i) for i in l]
             writer.writerow(l_no_nan)
 
-        if plot_res_class is not None:
-            plot_file_name = "tmp_res_epoch_%s.png" % epoch
-            plot_res_class.plot(results[0][0]['protection_matrix'],
-                                outfile=os.path.join(wd_output, plot_file_name),
-                                title="Epoch %s" % epoch)
+        if plot_res_class is None:
+            # pass
+            plot_res_class = plot_map_class(z=results[0][0]['reference_grid'].astype(int),
+                                            zero_to_nan=True)
+        plot_file_name = "tmp_res_epoch_%s.png" % epoch
+        plot_res_class.plot(results[0][0]['protection_matrix'],
+                            outfile=os.path.join(wd_output, plot_file_name),
+                            title="Epoch %s" % epoch)
+
 
         if return_species_data is not None:
             np.save(os.path.join(wd_output, outfile.split(".log")[0] + "_species_data.npy"),

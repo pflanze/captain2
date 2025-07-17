@@ -217,7 +217,10 @@ def graph_to_grid(graph, reference_grid_pu, n_pus=None, zero_to_nan=False,
     if len(graph.shape) == 3:
         m_grid = []
         for var in graph:
-            tmp = var.flatten()[:-(var.size - n_pus)] + 0
+            if var.size - n_pus != 0:
+                tmp = var.flatten()[:-(var.size - n_pus)] + 0
+            else:
+                tmp = var.flatten() + 0
             z = np.zeros(original_grid_shape)
             z[reference_grid_pu > 0] += tmp
             if zero_to_nan:
@@ -226,7 +229,10 @@ def graph_to_grid(graph, reference_grid_pu, n_pus=None, zero_to_nan=False,
 
         m_grid = np.array(m_grid)
     else:
-        tmp = graph.flatten()[:-(graph.size - n_pus)] + 0
+        if graph.size - n_pus != 0:
+            tmp = graph.flatten()[:-(graph.size - n_pus)] + 0
+        else:
+            tmp = graph.flatten() + 0
         m_grid = np.zeros(original_grid_shape)
         m_grid[reference_grid_pu > 0] += tmp
         if zero_to_nan:

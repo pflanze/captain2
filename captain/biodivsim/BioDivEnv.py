@@ -829,8 +829,12 @@ class BioDivEnv(gym.Env):
             if self.conv_block is None:
                 self.conv_block = np.ones((3,3))
 
-            tmp = self.bioDivGrid.protection_matrix.flatten(
-            )[:-(self.bioDivGrid.protection_matrix.size - self.bioDivGrid._n_pus)] + 0
+            if (self.bioDivGrid.protection_matrix.size - self.bioDivGrid._n_pus) != 0:
+                tmp = self.bioDivGrid.protection_matrix.flatten(
+                )[:-(self.bioDivGrid.protection_matrix.size - self.bioDivGrid._n_pus)] + 0
+            else:
+                # if protection_matrix.size == n_pus take full array
+                tmp = self.bioDivGrid.protection_matrix.flatten()
             m_grid = np.zeros(self.bioDivGrid._reference_grid_pu.shape)
             m_grid[self.bioDivGrid._reference_grid_pu > 0] += tmp
 
@@ -1464,7 +1468,8 @@ class BioDivEnv(gym.Env):
             "ExtantSpeciesPD": self.pd_extant_sp / self.pd_extant_sp_init,
             "TotalCarbon": np.sum(self.bioDivGrid.getCarbonValue_cell()) / self._init_total_carbon,
             "TotPopulation": np.sum(self.bioDivGrid.h) / self._init_total_population,
-            "protection_matrix": self.bioDivGrid.protection_matrix
+            "protection_matrix": self.bioDivGrid.protection_matrix,
+            "reference_grid": self.bioDivGrid._reference_grid_pu,
         }
         tmp = self.risk_label_counts(normalize=True)
         c_tmp = 0

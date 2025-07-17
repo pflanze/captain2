@@ -494,6 +494,7 @@ class plot_map_class():
     def __init__(self,
                  z=None,
                  nan_to_zero=False,
+                 zero_to_nan=False,
                  fig_s=None):
         if fig_s is None:
             fig_s = [0, 5.5]
@@ -501,6 +502,7 @@ class plot_map_class():
 
         self.reference_grid = z
         self.nan_to_zero = nan_to_zero
+        self.zero_to_nan = zero_to_nan
         self.fig_s = fig_s
         self.dpi = 250
 
@@ -518,8 +520,11 @@ class plot_map_class():
         m_plotted = (m_transf + 0).astype(float)
         if self.nan_to_zero:
             m_plotted[np.isnan(m_plotted)] = 0
+        if self.zero_to_nan:
+            m_plotted[np.isnan(m_plotted)] = np.nan
 
         if self.reference_grid is not None:
+            m_plotted[self.reference_grid==0] = np.float64(np.nan)
             m_plotted[np.isnan(self.reference_grid)] = np.float64(np.nan)
 
         sns.heatmap(m_plotted, cmap=cmap,

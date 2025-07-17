@@ -816,7 +816,13 @@ def get_rl_features_cell_carbon(h, natural_h, sp_carbon,
 
 
 def feature_convolution(feat_1d, reference_grid_pu, n_pus, conv_size, feat_shape_0, plot=""):
-    tmp = feat_1d.flatten()[:-(feat_1d.size - n_pus)] + 0
+    # print(feat_1d.size, n_pus, reference_grid_pu.shape, feat_shape_0, reference_grid_pu)
+    if (feat_1d.size - n_pus) != 0:
+        tmp = feat_1d.flatten()[:-(feat_1d.size - n_pus)] + 0
+    else:
+        # if feat_1d.size == n_pus take full array
+        tmp = feat_1d.flatten()
+    # print("tmp", tmp, len(tmp))
     m_grid = np.zeros(reference_grid_pu.shape)
     m_grid[reference_grid_pu > 0] += tmp  # <- disturbance
     # mean pooling
