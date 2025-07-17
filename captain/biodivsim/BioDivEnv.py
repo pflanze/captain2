@@ -1186,7 +1186,7 @@ class BioDivEnv(gym.Env):
                 rl = self.getExtinction_risk_labels()
                 protected_pop_per_species = self.bioDivGrid.protectedIndPerSpecies()
                 pop_size = self.bioDivGrid.individualsPerSpecies()
-                pr_fr = np.zeros(self.bioDivGrid.n_species)
+                pr_fr = np.zeros(self.bioDivGrid._n_species)
                 pr_fr[pop_size > 0] = 1 - (protected_pop_per_species[pop_size > 0] / pop_size[pop_size > 0])
                 avg_protection_rl_class = np.ones(self.species_risk_criteria.n_labels)
                 for i in range(self.species_risk_criteria.n_labels):
