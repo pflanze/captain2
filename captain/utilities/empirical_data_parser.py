@@ -495,6 +495,7 @@ class plot_map_class():
                  z=None,
                  nan_to_zero=False,
                  zero_to_nan=False,
+                 rescale01=False,
                  fig_s=None):
         if fig_s is None:
             fig_s = [0, 5.5]
@@ -505,6 +506,7 @@ class plot_map_class():
         self.zero_to_nan = zero_to_nan
         self.fig_s = fig_s
         self.dpi = 250
+        self.rescale01 = rescale01
 
     def plot(self, m, title=None, show=False, outfile=None, cmap="GnBu",
              vmin=None, vmax=None):
@@ -522,6 +524,16 @@ class plot_map_class():
             m_plotted[np.isnan(m_plotted)] = 0
         if self.zero_to_nan:
             m_plotted[np.isnan(m_plotted)] = np.nan
+
+
+        if np.nanmin(m_plotted) == 0 and np.nanmax(m_plotted) == 0:
+            vmin = 0
+            vmax = 1
+
+        elif self.rescale01:
+            m_plotted = (m_plotted - np.nanmin(m_plotted)) / (np.nanmax(m_plotted) - np.nanmin(m_plotted))
+            vmin = 0
+            vmax = 1
 
         if self.reference_grid is not None:
             m_plotted[self.reference_grid==0] = np.float64(np.nan)

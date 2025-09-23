@@ -295,11 +295,15 @@ class SimGrid(object):
             species_threshold_per_cell=1,
             precomputed_dispersal_probs=None,
             K_species=None, # max number of individuals of a species per cell
-            rm_lingering_pops=False
+            rm_lingering_pops=False,
+            species_ids=None,
     ):
         self._length = length
         self._n_species = num_species
-        self._species_id = np.arange(num_species)
+        if species_ids is None:
+            self._species_id = np.arange(num_species)
+        else:
+            self._species_id = np.array(species_ids)
         self._alpha = alpha  # fraction killed (1 number)
         self._K_max = K_max * np.ones((self._length, self._length))  # initial (max) carrying capacity
         self._lambda_0 = (
@@ -683,11 +687,17 @@ class SimGrid(object):
     def numberOfSpecies(self):
         return np.sum(np.einsum("sij->s", self._h) > self._species_threshold)
 
-    def extantSpeciesID(self):
-        return self._species_id[np.einsum("sij->s", self._h) > self._species_threshold]
+    def extantSpeciesID(self, return_indx=True):
+        if return_indx:
+            return np.where(np.einsum("sij->s", self._h) > self._species_threshold)[0]
+        else:
+            return self._species_id[np.einsum("sij->s", self._h) > self._species_threshold]
 
-    def extinctSpeciesID(self):
-        return self._species_id[np.einsum("sij->s", self._h) < self._species_threshold]
+    def extinctSpeciesID(self, return_indx=True):
+        if return_indx:
+            return np.where(np.einsum("sij->s", self._h) < self._species_threshold)[0]
+        else:
+            return self._species_id[np.einsum("sij->s", self._h) < self._species_threshold]
 
     def totalEDextantSpecies(self):
         return np.sum(
@@ -757,12 +767,29 @@ class SimGrid(object):
     def update_K_species3D(self):
         self._K_species3D = self._K_species[:, np.newaxis, np.newaxis] * self._habitat_suitability
 
+        try:
+            self._K_species3D *= (
+                    self._habitat_suitability > self._delta_suitability_per_step['threshold'])
+            # print("self._delta_suitability_per_step['threshold']", self._delta_suitability_per_step['threshold'])
+        except:
+            self._K_species3D *= (
+                    self._habitat_suitability > self._delta_suitability_per_step['threshold'][:, np.newaxis,
+                                                np.newaxis])
+            # print(
+            #     (self._habitat_suitability > self._delta_suitability_per_step['threshold'][:, np.newaxis, np.newaxis]))
 
     def update_habitat_suitability(self):
         # print("\nupdate_habitat_suitability",
         #       np.mean((self._habitat_suitability - (self._habitat_suitability + self._delta_suitability_per_step))**2))
-        suit_tmp = np.maximum(0, self._habitat_suitability + self._delta_suitability_per_step['delta'])
-        suit_tmp[suit_tmp < self._delta_suitability_per_step['threshold']] = 0
+        suit_tmp = np.maximum(0, self._habitat_suitability + self._delta_suitability_per_step['delta']) + 0
+        # NOTE: self._delta_suitability_per_step['threshold'] is applied in update_K_species3D()
+        # otherwise interpolation is reset at each step where threshold == 0
+
+        # try:
+        #     suit_tmp[suit_tmp < self._delta_suitability_per_step['threshold']] = 0
+        # except:
+        #     suit_tmp[suit_tmp < self._delta_suitability_per_step['threshold'][:, np.newaxis, np.newaxis]] = 0
+
         self.set_habitat_suitability(suit_tmp)
         self.update_K_species3D()
 
@@ -920,9 +947,15 @@ class SimGrid(object):
             if DEBUG:
                 print("running NumCandidates, _dispersal_before_death")
 
-            if skip_dispersal is False:
+            if skip_dispersal is False and self._lambda_0 is not None:
                 if self._future_habitat_suitability is not None and update_suitability:
+                    # print("\nrunning self.update_habitat_suitability()",
+                    #       np.sum(self._habitat_suitability[5] >
+                    #              self._delta_suitability_per_step['threshold'][5])
+                    #       )
                     self.update_habitat_suitability()
+                    # print(                    np.sum(self._habitat_suitability[5] >
+                    #        self._delta_suitability_per_step['threshold'][5]))
 
                 if DEBUG:
                     print("running NumCandidates, sij,ijnm->snm")
