@@ -20,7 +20,7 @@ install it on Python %s.%s.
 requirements_list = [
     "matplotlib>=3.5.3",
     "seaborn==0.12.2",
-    "numpy==1.23.4",
+    "numpy~=1.26.0",
     "pandas>=1.5.1",
     "scipy>=1.9.3",
     "baltic>=0.1.6",
