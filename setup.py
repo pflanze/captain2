@@ -24,7 +24,7 @@ requirements_list = [
     "pandas>=1.5.1",
     "scipy>=1.9.3",
     "baltic>=0.1.6",
-    "gym>=0.26.2",
+    "gymnasium>=1.2.1",
     "DendroPy>=4.5.2",
     "numba>=0.56.3",
     "plotly==5.15.0",

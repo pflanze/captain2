@@ -1,7 +1,7 @@
 import sys
 
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 import numpy as np
 from scipy import ndimage
 from enum import Enum
