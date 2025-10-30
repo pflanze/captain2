@@ -36,7 +36,7 @@ requirements_list = [
     "rasterio==1.3.6",
     # "earthpy==0.9.4",
     "geopy==2.4.1",
-    "shapely==2.0.1",
+    "shapely==2.1.2",
     "geocube==0.4.0",
     ]
 

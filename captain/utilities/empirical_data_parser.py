@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore", message="Dataset has no geotransform, gcps, or
 import rasterio
 # import earthpy as et
 from shapely.geometry import Polygon, shape, Point
-from shapely.ops import cascaded_union, unary_union
+from shapely.ops import unary_union, unary_union
 from rasterio.enums import Resampling
 from geocube.api.core import make_geocube
 from geocube.rasterize import rasterize_points_griddata
