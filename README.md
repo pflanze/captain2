@@ -20,6 +20,10 @@ or on Windows:
 
 `.\venv\Scripts\activate`
 
+Install setuptools:
+
+`python -m pip install setuptools`
+
 Install CAPTAIN:
 
 `python -m pip install .`
