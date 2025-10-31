@@ -8,6 +8,25 @@ import scipy.stats
 import sparse
 from collections.abc import Iterable
 
+import timeit
+
+def mytime(nam, proc):
+    res=()
+    def f():
+        nonlocal res
+        res=proc()
+    t=timeit.timeit(f, number=1)
+    print(f"t {nam}={t:.6f}")
+    return res
+
+def pp(nam, val):
+    print(f"pp {nam}: {val}")
+    return val
+
+def pp_mytime(nam, proc):
+    return pp(nam, mytime(nam, proc))
+
+
 
 small_number = 1e-10
 DEBUG = False
@@ -973,17 +992,19 @@ class SimGrid(object):
                 # self._h = np.einsum("sij,s->sij", self._h, self._growth_rate)
 
                 if not isinstance(self._lambda_0, Iterable):
-                    NumCandidates = sparse.tensordot(self._h, self._dumping_dist ** (1 / self._lambda_0))
+                    NumCandidates = mytime("NumCandidates tensordot",
+                                              lambda: sparse.tensordot(self._h, self._dumping_dist ** (1 / self._lambda_0)))
                     if DEBUG:
                         print("\nNumCandidates", self._lambda_0, NumCandidates[0][:10])
                 else:
                     if DEBUG:
                         print("running NumCandidates, sij,ijnm->snm | per species dispersal rate")
-                    NumCandidates = np.array(
+                    NumCandidates = pp_mytime("NumCandidates einsum",
+                                              lambda: np.array(
                         [sparse.einsum("ij,ijnm->nm", # this is already the total number after migration
                                        self._h[i],
                                        self._dumping_dist ** (1 / self._lambda_0[i])
-                                       ).todense() for i in range(self._n_species)])
+                                       ).todense() for i in range(self._n_species)]))
 
 
                 if self._K_species is not None:
